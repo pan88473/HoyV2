@@ -1,0 +1,2260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Campo Mágico - Leyma & Sam</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+  html,body { height:100%; overflow:hidden; touch-action:none; font-family:'Segoe UI',Tahoma,sans-serif; }
+  body { background: linear-gradient(180deg,#4b3a7a 0%,#8f5aa8 25%,#e08bb0 50%,#ffb98a 72%,#ffe0b0 100%); }
+  canvas { display:block; touch-action:none; }
+
+  #ui { position:fixed; inset:0; pointer-events:none; z-index:5; }
+  #joyBase, #joyKnob { position:absolute; border-radius:50%; pointer-events:none; }
+  #joyBase { width:100px; height:100px; background:rgba(255,255,255,0.18); border:2px solid rgba(255,255,255,0.45); display:none; }
+  #joyKnob { width:44px; height:44px; background:rgba(255,255,255,0.55); border:2px solid rgba(255,255,255,0.8); display:none; }
+
+  #jumpBtn {
+    position:absolute; bottom:150px; right:26px; width:72px; height:72px; border-radius:50%;
+    background:rgba(255,255,255,0.28); border:2px solid rgba(255,255,255,0.6);
+    display:flex; align-items:center; justify-content:center; font-size:26px; color:#fff;
+    pointer-events:auto; z-index:6;
+  }
+  #jumpBtn.active { background:rgba(255,255,255,0.6); transform:scale(0.92); }
+
+  #hint {
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    color:#4a2a3a; background:rgba(255,255,255,0.65); padding:6px 16px;
+    border-radius:20px; font-size:12px; font-weight:600; transition:opacity 1s; text-align:center;
+  }
+
+  #inventory {
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    display:flex; gap:10px; pointer-events:auto; z-index:6;
+  }
+  .invSlot {
+    width:58px; height:58px; border-radius:14px; background:rgba(255,255,255,0.35);
+    border:2px solid rgba(255,255,255,0.7); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; color:#fff; font-size:22px; position:relative;
+    text-shadow:0 2px 4px rgba(0,0,0,0.3);
+  }
+  .invSlot .cnt {
+    position:absolute; bottom:2px; right:5px; font-size:11px; font-weight:bold;
+    background:rgba(0,0,0,0.35); padding:0 5px; border-radius:8px;
+  }
+  .invSlot.usable { cursor:pointer; }
+  .invSlot.usable:active { transform:scale(0.9); }
+  .invSlot.disabled { opacity:0.35; pointer-events:none; }
+
+  #chatBox {
+    position:absolute; top:12px; left:12px; width:230px; pointer-events:auto; z-index:8;
+    background:rgba(30,15,40,0.42); border:1px solid rgba(255,255,255,0.35); border-radius:14px;
+    padding:8px; backdrop-filter: blur(2px);
+  }
+  #chatHeader { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+  #chatHeader span { font-size:11px; color:#fff; opacity:0.85; font-weight:bold; letter-spacing:.3px; }
+  #chatToggle {
+    border:none; border-radius:8px; background:rgba(255,255,255,0.28); color:#fff;
+    font-size:12px; padding:3px 9px; cursor:pointer;
+  }
+  #chatBox.collapsed { width:auto; padding:6px 10px; }
+  #chatBox.collapsed #chatHistory, #chatBox.collapsed #chatRow, #chatBox.collapsed #emojiPanel { display:none; }
+  #chatBox.collapsed #chatHeader { margin-bottom:0; }
+  #chatHistory {
+    max-height:130px; overflow-y:auto; font-size:12px; color:#fff; margin-bottom:6px;
+    display:flex; flex-direction:column; gap:3px;
+  }
+  #chatHistory .msg { text-shadow:0 1px 3px rgba(0,0,0,0.5); word-wrap:break-word; }
+  #chatHistory .msg b { color:#ffd9ec; }
+  #chatRow { display:flex; gap:4px; align-items:center; }
+  #chatInput {
+    flex:1; min-width:0; border:none; border-radius:10px; padding:6px 8px; font-size:12px;
+  }
+  #emojiToggle, #chatSend {
+    border:none; border-radius:10px; background:rgba(255,255,255,0.35); color:#fff;
+    font-size:14px; padding:6px 8px; cursor:pointer;
+  }
+  #emojiPanel {
+    display:none; flex-wrap:wrap; gap:4px; margin-top:6px; max-width:214px;
+  }
+  #emojiPanel.open { display:flex; }
+  #emojiPanel span {
+    font-size:18px; cursor:pointer; padding:2px;
+  }
+
+  #interactBtn {
+    position:absolute; left:50%; bottom:210px; transform:translateX(-50%);
+    display:none; pointer-events:auto; z-index:7;
+    padding:10px 20px; border-radius:24px; border:none;
+    background:rgba(255,255,255,0.85); color:#4a2a3a; font-weight:bold; font-size:14px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.3);
+  }
+  #interactBtn.show { display:block; }
+
+  #ceremonyUI {
+    position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+    width:min(84vw,440px); z-index:9; pointer-events:none;
+  }
+
+  #dialogueBox {
+    display:none; width:100%; pointer-events:none;
+    background:rgba(30,15,40,0.75); border:1px solid rgba(255,255,255,0.4);
+    border-radius:14px; padding:12px 16px; color:#fff; text-align:center;
+  }
+  #dialogueBox.show { display:block; }
+  #dialogueBox .who { font-weight:bold; color:#ffe0b0; font-size:12px; margin-bottom:4px; letter-spacing:.5px; }
+  #dialogueBox .line { font-size:14px; line-height:1.4; }
+
+  #vowButtons {
+    display:none; gap:16px; pointer-events:auto;
+  }
+  #vowButtons.show { display:flex; }
+  #vowButtons button {
+    padding:12px 26px; border-radius:26px; border:none; font-size:16px; font-weight:bold;
+    box-shadow:0 4px 14px rgba(0,0,0,0.3); cursor:pointer;
+  }
+  #vowYes { background:linear-gradient(90deg,#ff9ec7,#ff5c8a); color:#fff; }
+  #vowNo { background:rgba(255,255,255,0.85); color:#5a3a4a; }
+  #vowButtons button:active { transform:scale(0.94); }
+
+  #waitingNote {
+    display:none; color:#fff; font-size:12px; background:rgba(0,0,0,0.35);
+    padding:6px 14px; border-radius:14px;
+  }
+  #waitingNote.show { display:block; }
+
+  #players {
+    position:absolute; top:14px; right:56px; color:#fff; font-size:12px;
+    background:rgba(0,0,0,0.25); padding:6px 12px; border-radius:14px; text-align:right;
+  }
+  #witchHud {
+    position:absolute; top:56px; right:14px; display:none;
+    background:rgba(45,15,55,0.6); color:#fff; padding:6px 12px; border-radius:14px;
+    font-size:12px; font-weight:bold; z-index:8;
+  }
+  #witchHud.show { display:block; }
+  #caughtOverlay {
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    flex-direction:column; gap:8px; background:rgba(15,5,25,0.8); color:#fff;
+    text-align:center; z-index:40; padding:24px;
+  }
+  #caughtOverlay.show { display:flex; }
+  #caughtOverlay .big { font-size:clamp(22px,6vw,36px); font-weight:bold; }
+  #caughtOverlay .small { font-size:13px; opacity:0.85; }
+  #witchWinNote {
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    display:none; background:rgba(30,15,40,0.9); color:#fff; padding:18px 28px;
+    border-radius:16px; font-size:15px; text-align:center; z-index:40; line-height:1.5;
+  }
+  #witchWinNote.show { display:block; }
+  #musicToggle {
+    position:absolute; top:14px; right:14px; width:34px; height:34px; border-radius:50%;
+    border:none; background:rgba(0,0,0,0.3); color:#fff; font-size:15px; pointer-events:auto; z-index:7;
+  }
+
+  #overlay {
+    position:fixed; inset:0; z-index:20; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; padding:22px;
+    background:linear-gradient(180deg,#4b3a7a,#e08bb0 55%,#ffe0b0); color:#3a2140; overflow-y:auto;
+  }
+  #overlay h1 { font-size:clamp(22px,6vw,36px); margin-bottom:8px; color:#fff; text-shadow:0 2px 10px rgba(120,60,100,0.6); }
+  #overlay p { font-size:clamp(12px,3vw,15px); max-width:440px; margin:5px 0; color:#fff; opacity:.92; text-shadow:0 1px 4px rgba(0,0,0,0.25); }
+
+  #roomBox { margin-top:14px; }
+  #roomInput {
+    padding:10px 14px; border-radius:20px; border:none; font-size:14px; width:220px; text-align:center;
+  }
+
+  #charSelect { display:flex; gap:16px; margin-top:18px; }
+  .charCard {
+    width:130px; padding:14px 10px; border-radius:16px; background:rgba(255,255,255,0.18);
+    border:2px solid rgba(255,255,255,0.4); cursor:pointer; color:#fff;
+  }
+  .charCard.selected { background:rgba(255,255,255,0.5); border-color:#fff; box-shadow:0 0 18px rgba(255,255,255,0.6); }
+  .charCard.taken { opacity:0.4; cursor:not-allowed; }
+  .charCard .emoji { font-size:38px; }
+  .charCard .label { font-weight:bold; margin-top:4px; font-size:14px; }
+  .charCard .status { font-size:11px; opacity:0.85; margin-top:2px; }
+
+  #startBtn {
+    margin-top:22px; padding:14px 38px; font-size:17px; font-weight:bold;
+    border:none; border-radius:30px; background:linear-gradient(90deg,#ff9ec7,#a084ff);
+    color:#fff; cursor:pointer; box-shadow:0 4px 18px rgba(160,132,255,0.55);
+  }
+  #startBtn:disabled { opacity:0.45; cursor:not-allowed; }
+  #startBtn:active:not(:disabled) { transform:scale(0.96); }
+
+  #connNote { font-size:11px; margin-top:14px; opacity:0.8; max-width:380px; color:#fff8ea; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <h1>💍 Campo Mágico</h1>
+  <p>Un campo de fantasía al atardecer para explorar juntos. Elige tu personaje y entra al mundo.</p>
+
+  <div id="roomBox">
+    <input id="roomInput" type="text" value="leyma-y-sam" maxlength="24" placeholder="código de sala" />
+  </div>
+
+  <div id="charSelect">
+    <div class="charCard" data-char="leyma">
+      <div class="emoji">👰</div>
+      <div class="label">Leyma</div>
+      <div class="status" id="statusLeyma">disponible</div>
+    </div>
+    <div class="charCard" data-char="sam">
+      <div class="emoji">🤵</div>
+      <div class="label">Sam</div>
+      <div class="status" id="statusSam">disponible</div>
+    </div>
+  </div>
+
+  <button id="startBtn" disabled>Elige un personaje</button>
+  <p id="connNote"></p>
+</div>
+
+<div id="ui">
+  <div id="joyBase"></div>
+  <div id="joyKnob"></div>
+  <div id="jumpBtn">⤴</div>
+  <button id="interactBtn" type="button">💬 Hablar con el sacerdote</button>
+  <div id="ceremonyUI">
+    <div id="dialogueBox"><div class="who">Sacerdote</div><div class="line" id="dialogueLine"></div></div>
+    <div id="vowButtons">
+      <button id="vowYes" type="button">Sí ❤️</button>
+      <button id="vowNo" type="button">No 💔</button>
+    </div>
+    <div id="waitingNote"></div>
+  </div>
+  <div id="hint">Camina, salta con 🎈 y recoge objetos 💫</div>
+  <div id="inventory">
+    <div class="invSlot" id="slotPizza">🍕<span class="cnt" id="cntPizza">0</span></div>
+    <div class="invSlot usable" id="slotBalloon">🎈<span class="cnt" id="cntBalloon">0</span></div>
+    <div class="invSlot" id="slotPeluche">🧸<span class="cnt" id="cntPeluche">0</span></div>
+    <div class="invSlot usable disabled" id="slotCheckpoint" title="Volver al último punto de guardado">⬆️</div>
+  </div>
+  <div id="players">Jugadores: <span id="playerCount">1</span></div>
+  <div id="witchHud">🍎 <span id="appleCount">0/5</span> · 🧙‍♀️×<span id="witchCount">1</span></div>
+  <button id="musicToggle" type="button">🔊</button>
+  <midi-player id="bgMidiPlayer" style="display:none"></midi-player>
+
+  <div id="caughtOverlay">
+    <div class="big">🧙‍♀️ ¡La bruja te atrapó!</div>
+    <div class="small">Reapareces en otro lugar del mapa...</div>
+  </div>
+  <div id="witchWinNote">¡Han recolectado las 5 manzanas!<br>La bruja se desvanece entre las sombras. 🍎✨</div>
+
+  <div id="chatBox">
+    <div id="chatHeader">
+      <span>💬 Chat</span>
+      <button id="chatToggle" type="button">▾ ocultar</button>
+    </div>
+    <div id="chatHistory"></div>
+    <div id="chatRow">
+      <button id="emojiToggle" type="button">😊</button>
+      <input id="chatInput" type="text" maxlength="80" placeholder="Escribe algo..." />
+      <button id="chatSend" type="button">➤</button>
+    </div>
+    <div id="emojiPanel">
+      <span>😀</span><span>😂</span><span>🥰</span><span>😍</span><span>😢</span><span>😮</span>
+      <span>👍</span><span>🎉</span><span>❤️</span><span>🌸</span><span>🎈</span><span>🍕</span>
+      <span>🧸</span><span>💍</span><span>✨</span><span>👰</span><span>🤵</span><span>🔥</span>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase (compat SDK: sencillo de usar sin build tools) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- Reproductor de MIDI ambiental (silencioso si no carga; el juego sigue funcionando igual) -->
+<script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/html-midi-player@1.5.0"></script>
+<script>
+(function(){
+  "use strict";
+
+  // =================================================================
+  // 🔥 CONFIGURA TU FIREBASE AQUÍ
+  // 1) Ve a https://console.firebase.google.com -> Crear proyecto (gratis)
+  // 2) Dentro del proyecto: "Compilación" -> "Realtime Database" -> Crear
+  //    base de datos -> empieza en "modo de prueba".
+  // 3) En "Configuración del proyecto" -> "Tus apps" -> Web (</>) -> copia
+  //    el objeto firebaseConfig y pégalo abajo, reemplazando los "TU_...".
+  // Mientras esto tenga valores de ejemplo, el juego corre en modo
+  // SIN CONEXIÓN (un solo jugador) para que nunca se rompa.
+  // =================================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyBHAs-NkodvSDvfbXDZUqSharhO7nkVZ10",
+    authDomain: "fir-191c0.firebaseapp.com",
+    databaseURL: "https://fir-191c0-default-rtdb.firebaseio.com",
+    projectId: "fir-191c0",
+    storageBucket: "fir-191c0.firebasestorage.app",
+    messagingSenderId: "292304513145",
+    appId: "1:292304513145:web:565c9c9baaa146095acca8"
+  };
+
+  let multiplayerEnabled = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('TU_');
+  let db = null, roomRef = null, myRef = null, myPlayerId = null, roomCode = 'leyma-y-sam';
+
+  if(multiplayerEnabled){
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.database();
+    } catch(err){
+      console.warn('Firebase no se pudo inicializar, modo sin conexión.', err);
+      multiplayerEnabled = false;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // CONFIG DEL MUNDO
+  // ---------------------------------------------------------------
+  const FIELD_RADIUS = 78;
+  const FOG_NEAR = 12;
+  const FOG_FAR = 88;
+  const TOTAL_FLOWERS = 1500;
+  const EYE_HEIGHT = 1.6;
+  const MOVE_SPEED = 3.2;
+  const GRAVITY = -16;
+  const JUMP_FORCE = 6.0;
+  const JUMP_FORCE_BOOSTED = 9.6;
+  const ALTAR = { x:0, z:-16 };
+  const SKY_HORIZON = 0xffcf9c;
+
+  // ============================================================
+  // ✏️ EDIT ME LATER: the giant sky-crawl text shown when someone
+  // finishes the whole parkour course. Use "\n" for a new line —
+  // as many lines as you like, it just keeps scrolling.
+  // ============================================================
+  const SKY_FINALE_TEXT = "Leyma y Sam\npor siempre 💘";
+  const GRASS_TINT = 0x8fbf5a;
+
+  let scene, camera, renderer, yawObject;
+  let clock = new THREE.Clock();
+  let breezeGroup, petalMesh, fireflyPoints;
+  let balloonsAmbient = [];
+  let running = false;
+  let petalData = [];
+  let fireflyData = [];
+  let worldItems = [];
+  let remotePlayers = {}; // id -> { mesh, targetPos, targetRot, char }
+
+  const keyState = { forward:false, back:false, left:false, right:false, jump:false };
+  let joyVec = { x:0, y:0 };
+  let joyTouchId = null, joyOriginX=0, joyOriginY=0;
+  let lookTouchId = null, lastLookX=0, lastLookY=0;
+  let mouseLookActive = false, lastMouseX=0, lastMouseY=0;
+  let yaw = 0, pitch = -0.04;
+
+  let velY = 0, grounded = true, feetY = 0;
+  let speedFactor = 0, rollCurrent = 0;
+  let inventory = { pizza:0, balloon:0, peluche:0 };
+  let placedItems = [];
+  let lastBounce = 0;
+  let nearPriest = false;
+  let towerPlatforms = [];
+  let towerTopPlatform = null;
+  let spiralEndPlatform = null;
+  let wasOnTowerTop = false;
+  let activeFireworks = [];
+  const TOWER_POS = { x: 46, z: 38 };
+  let myCharacter = null; // 'leyma' | 'sam'
+
+  const flowerPalette = [
+    { petal:'#e0455f', center:'#f6d94a' },
+    { petal:'#ffd23f', center:'#c9762b' },
+    { petal:'#ffffff', center:'#ffcc33' },
+    { petal:'#a084ff', center:'#5a3fae' },
+    { petal:'#ff9ec7', center:'#ffdf6b' }
+  ];
+  let flowerTextures = [];
+
+  // =================================================================
+  // CHARACTER SELECT / ROOM SCREEN
+  // =================================================================
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const roomInput = document.getElementById('roomInput');
+  const connNote = document.getElementById('connNote');
+  const cards = document.querySelectorAll('.charCard');
+
+  connNote.textContent = multiplayerEnabled
+    ? '🌐 Modo en línea: verán a Leyma y a Sam moverse en tiempo real.'
+    : '🔌 Modo sin conexión: agrega tu configuración de Firebase en el código para jugar junto a Leyma/Sam en tiempo real.';
+
+  function getOrCreatePlayerId(){
+    let id = localStorage.getItem('campoMagico_playerId');
+    if(!id){
+      id = 'p_' + Math.random().toString(36).slice(2,10);
+      localStorage.setItem('campoMagico_playerId', id);
+    }
+    return id;
+  }
+  myPlayerId = getOrCreatePlayerId();
+
+  function refreshCharAvailability(){
+    if(!multiplayerEnabled) return;
+    db.ref('rooms/' + roomInput.value.trim() + '/players').once('value').then(snap=>{
+      const taken = { leyma:false, sam:false };
+      snap.forEach(child=>{
+        const p = child.val();
+        if(child.key !== myPlayerId && p.character){ taken[p.character] = true; }
+      });
+      document.getElementById('statusLeyma').textContent = taken.leyma ? 'en uso' : 'disponible';
+      document.getElementById('statusSam').textContent = taken.sam ? 'en uso' : 'disponible';
+      cards.forEach(c=>{
+        const ch = c.dataset.char;
+        c.classList.toggle('taken', taken[ch] && myCharacter !== ch);
+      });
+    });
+  }
+  if(multiplayerEnabled){
+    refreshCharAvailability();
+    roomInput.addEventListener('change', refreshCharAvailability);
+  }
+
+  cards.forEach(card=>{
+    card.addEventListener('click', ()=>{
+      if(card.classList.contains('taken')) return;
+      cards.forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected');
+      myCharacter = card.dataset.char;
+      startBtn.disabled = false;
+      startBtn.textContent = 'Entrar como ' + (myCharacter==='leyma' ? 'Leyma 👰' : 'Sam 🤵');
+    });
+  });
+
+  startBtn.addEventListener('click', ()=>{
+    // unlock the shared Web Audio context synchronously within this real user
+    // gesture — required by Android/Chrome before any sound can play
+    try { if(window.Tone && Tone.start){ Tone.start(); } } catch(e){}
+    roomCode = roomInput.value.trim() || 'leyma-y-sam';
+    overlay.classList.add('hidden');
+    initWorld();
+    setupMusic();
+  });
+
+  // =================================================================
+  // WORLD INIT (runs once character/room chosen)
+  // =================================================================
+  function initWorld(){
+    const canvas = document.createElement('canvas');
+    document.body.appendChild(canvas);
+
+    renderer = new THREE.WebGLRenderer({ canvas, antialias:false, alpha:true, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+
+    scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(SKY_HORIZON, FOG_NEAR, FOG_FAR);
+
+    camera = new THREE.PerspectiveCamera(68, window.innerWidth/window.innerHeight, 0.1, FOG_FAR+15);
+    yawObject = new THREE.Object3D();
+    yawObject.position.set(myCharacter==='leyma' ? -1.2 : 1.2, EYE_HEIGHT, 10);
+    yawObject.add(camera);
+    scene.add(yawObject);
+
+    const hemi = new THREE.HemisphereLight(0xffc6a3, GRASS_TINT, 1.0);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffcf9c, 1.0);
+    sun.position.set(-25, 18, -10);
+    scene.add(sun);
+    const fill = new THREE.DirectionalLight(0xb98fe0, 0.35);
+    fill.position.set(20, 10, 20);
+    scene.add(fill);
+
+    flowerPalette.forEach(p=> flowerTextures.push(createFlowerTexture(p.petal, p.center)));
+
+    const groundGeo = new THREE.PlaneGeometry(FIELD_RADIUS*2.6, FIELD_RADIUS*2.6, 1, 1);
+    groundGeo.rotateX(-Math.PI/2);
+    scene.add(new THREE.Mesh(groundGeo, new THREE.MeshLambertMaterial({ map: createGrassTexture() })));
+
+    const pathGeo = new THREE.PlaneGeometry(2.0, 26, 1, 1);
+    pathGeo.rotateX(-Math.PI/2);
+    const path = new THREE.Mesh(pathGeo, new THREE.MeshLambertMaterial({ color:0xffd9e8, transparent:true, opacity:0.85 }));
+    path.position.set(0, 0.015, (10+ALTAR.z)/2);
+    scene.add(path);
+
+    const hillGeo = new THREE.IcosahedronGeometry(1, 0);
+    const hillMat = new THREE.MeshLambertMaterial({ color: 0x6a9e4a });
+    for(let i=0;i<10;i++){
+      const a = (i/10) * Math.PI * 2 + Math.random()*0.2;
+      const r = FIELD_RADIUS*0.92 + Math.random()*14;
+      const h = new THREE.Mesh(hillGeo, hillMat);
+      const s = 14 + Math.random()*16;
+      h.scale.set(s, s*0.55, s);
+      h.position.set(Math.cos(a)*r, -s*0.35, Math.sin(a)*r);
+      scene.add(h);
+    }
+
+    const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map:createGlowTexture('#fff2d0'), transparent:true, depthWrite:false }));
+    sunSprite.scale.set(22,22,1); sunSprite.position.set(-40, 22, -30); scene.add(sunSprite);
+    const moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map:createGlowTexture('#e7e2ff'), transparent:true, depthWrite:false, opacity:0.8 }));
+    moonSprite.scale.set(10,10,1); moonSprite.position.set(48, 30, -25); scene.add(moonSprite);
+
+    scene.add(createStars());
+
+    const cloudTex = createCloudTexture();
+    for(let i=0;i<7;i++){
+      const c = new THREE.Sprite(new THREE.SpriteMaterial({ map:cloudTex, color:0xffe3d0, transparent:true, opacity:0.8, depthWrite:false }));
+      const s = 14 + Math.random()*10;
+      c.scale.set(s, s*0.55, 1);
+      const a = Math.random()*Math.PI*2, r = 40 + Math.random()*35;
+      c.position.set(Math.cos(a)*r, 20+Math.random()*10, Math.sin(a)*r);
+      scene.add(c);
+    }
+
+    breezeGroup = new THREE.Group();
+    scene.add(breezeGroup);
+    buildFlowerField(breezeGroup);
+    buildTrees();
+    buildAltar();
+    buildPriest();
+    buildTower();
+    buildSkyPath();
+    buildAmbientBalloons();
+    buildPetals();
+    buildFireflies();
+    buildWorldItems();
+
+    window.addEventListener('resize', onResize);
+    setupInput(canvas);
+    setupJumpButton();
+    setupInventoryUI();
+    setupChatUI();
+    setupInteract();
+
+    if(multiplayerEnabled){
+      connectMultiplayer();
+    }
+
+    running = true;
+    clock.start();
+    setTimeout(()=>{ document.getElementById('hint').style.opacity='0'; }, 5000);
+    animate();
+  }
+
+  // ---------------------------------------------------------------
+  // TEXTURES
+  // ---------------------------------------------------------------
+  function createGrassTexture(){
+    const c = document.createElement('canvas'); c.width=c.height=128;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#79b957'; ctx.fillRect(0,0,128,128);
+    for(let i=0;i<450;i++){
+      const x=Math.random()*128,y=Math.random()*128;
+      ctx.fillStyle = Math.random()>0.5 ? 'rgba(255,210,160,0.12)' : 'rgba(120,200,90,0.35)';
+      ctx.fillRect(x,y,2,2);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(40,40); tex.magFilter=THREE.NearestFilter;
+    return tex;
+  }
+  function createFlowerTexture(petal, center){
+    const c=document.createElement('canvas'); c.width=c.height=64;
+    const ctx=c.getContext('2d'); ctx.translate(32,32); ctx.fillStyle=petal;
+    for(let i=0;i<6;i++){ ctx.save(); ctx.rotate((Math.PI*2/6)*i); ctx.beginPath(); ctx.ellipse(0,-13,7,13,0,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+    ctx.fillStyle=center; ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill();
+    return new THREE.CanvasTexture(c);
+  }
+  function createGlowTexture(color){
+    const c=document.createElement('canvas'); c.width=c.height=128;
+    const ctx=c.getContext('2d');
+    const g=ctx.createRadialGradient(64,64,0,64,64,64);
+    g.addColorStop(0,color); g.addColorStop(0.45,color); g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,128,128);
+    return new THREE.CanvasTexture(c);
+  }
+  function createCloudTexture(){
+    const c=document.createElement('canvas'); c.width=128; c.height=72;
+    const ctx=c.getContext('2d'); ctx.fillStyle='rgba(255,255,255,0.95)';
+    function blob(x,y,r){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
+    blob(40,40,22); blob(65,32,26); blob(90,42,20); blob(60,50,24);
+    return new THREE.CanvasTexture(c);
+  }
+  function createStars(){
+    const geo = new THREE.BufferGeometry();
+    const N=260, positions=new Float32Array(N*3);
+    for(let i=0;i<N;i++){
+      const theta=Math.random()*Math.PI*2, phi=Math.random()*Math.PI*0.45, r=90;
+      positions[i*3]=Math.cos(theta)*Math.sin(phi)*r;
+      positions[i*3+1]=Math.cos(phi)*r*0.9+15;
+      positions[i*3+2]=Math.sin(theta)*Math.sin(phi)*r;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+    return new THREE.Points(geo, new THREE.PointsMaterial({ color:0xfff6e0, size:0.9, transparent:true, opacity:0.75 }));
+  }
+
+  // ---------------------------------------------------------------
+  // FLOWER FIELD
+  // ---------------------------------------------------------------
+  function createCrossGeometry(width, height, yOffset){
+    const hw=width/2;
+    const positions=new Float32Array([
+      -hw,yOffset,0, hw,yOffset,0, hw,yOffset+height,0, -hw,yOffset+height,0,
+      0,yOffset,-hw, 0,yOffset,hw, 0,yOffset+height,hw, 0,yOffset+height,-hw
+    ]);
+    const uvs=new Float32Array([0,0,1,0,1,1,0,1, 0,0,1,0,1,1,0,1]);
+    const indices=[0,1,2,0,2,3, 4,5,6,4,6,7];
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs,2));
+    geo.setIndex(indices); geo.computeVertexNormals();
+    return geo;
+  }
+  function tooCloseToAltar(x,z){ return Math.hypot(x-ALTAR.x, z-ALTAR.z) < 5.2; }
+  function tooCloseToTower(x,z){ return Math.hypot(x-TOWER_POS.x, z-TOWER_POS.z) < 5.5; }
+
+  function buildFlowerField(group){
+    const stemHeight=0.34;
+    const stemGeo=new THREE.CylinderGeometry(0.015,0.02,stemHeight,4);
+    stemGeo.translate(0,stemHeight/2,0);
+    const stemMesh=new THREE.InstancedMesh(stemGeo, new THREE.MeshLambertMaterial({color:0x3f8a2c}), TOTAL_FLOWERS);
+
+    const flowers=[];
+    for(let i=0;i<TOTAL_FLOWERS;i++){
+      let x,z,r;
+      do { x=(Math.random()*2-1)*FIELD_RADIUS; z=(Math.random()*2-1)*FIELD_RADIUS; r=Math.hypot(x,z); }
+      while(r>FIELD_RADIUS || r<3.5 || tooCloseToAltar(x,z) || tooCloseToTower(x,z));
+      flowers.push({x,z,rot:Math.random()*Math.PI*2, scale:0.75+Math.random()*0.6, color:Math.floor(Math.random()*flowerPalette.length)});
+    }
+    const dummy=new THREE.Object3D();
+    flowers.forEach((f,i)=>{
+      dummy.position.set(f.x,0,f.z); dummy.rotation.set(0,f.rot,0); dummy.scale.setScalar(f.scale);
+      dummy.updateMatrix(); stemMesh.setMatrixAt(i,dummy.matrix);
+    });
+    stemMesh.instanceMatrix.needsUpdate=true;
+    group.add(stemMesh);
+
+    const headHeight=0.22, headWidth=0.22;
+    flowerPalette.forEach((p,colorIdx)=>{
+      const list=flowers.filter(f=>f.color===colorIdx);
+      if(!list.length) return;
+      const headGeo=createCrossGeometry(headWidth,headHeight,stemHeight-0.03);
+      const headMat=new THREE.MeshLambertMaterial({ map:flowerTextures[colorIdx], transparent:true, alphaTest:0.4, side:THREE.DoubleSide });
+      const headMesh=new THREE.InstancedMesh(headGeo, headMat, list.length);
+      list.forEach((f,i)=>{
+        dummy.position.set(f.x,0,f.z); dummy.rotation.set(0,f.rot,0); dummy.scale.setScalar(f.scale);
+        dummy.updateMatrix(); headMesh.setMatrixAt(i,dummy.matrix);
+      });
+      headMesh.instanceMatrix.needsUpdate=true;
+      group.add(headMesh);
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // TREES
+  // ---------------------------------------------------------------
+  function buildTrees(){
+    const COUNT=46, spots=[];
+    for(let i=0;i<COUNT;i++){
+      let x,z,r;
+      do { x=(Math.random()*2-1)*FIELD_RADIUS*0.95; z=(Math.random()*2-1)*FIELD_RADIUS*0.95; r=Math.hypot(x,z); }
+      while(r<FIELD_RADIUS*0.55 || r>FIELD_RADIUS*0.95 || tooCloseToAltar(x,z) || tooCloseToTower(x,z));
+      spots.push({x,z,blossom:Math.random()<0.6, scale:0.85+Math.random()*0.5, rot:Math.random()*Math.PI*2});
+    }
+    const trunkGeo=new THREE.CylinderGeometry(0.09,0.14,1.6,5); trunkGeo.translate(0,0.8,0);
+    const trunkMesh=new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({color:0x6b4a30}), spots.length);
+    const foliageGeo=new THREE.IcosahedronGeometry(1,0); foliageGeo.translate(0,2.2,0);
+    const blossomList=spots.filter(s=>s.blossom), greenList=spots.filter(s=>!s.blossom);
+    const blossomMesh=new THREE.InstancedMesh(foliageGeo, new THREE.MeshLambertMaterial({color:0xffbcd9}), blossomList.length||1);
+    const greenMesh=new THREE.InstancedMesh(foliageGeo, new THREE.MeshLambertMaterial({color:0x4f9a52}), greenList.length||1);
+    const dummy=new THREE.Object3D();
+    spots.forEach((s,i)=>{ dummy.position.set(s.x,0,s.z); dummy.rotation.set(0,s.rot,0); dummy.scale.setScalar(s.scale); dummy.updateMatrix(); trunkMesh.setMatrixAt(i,dummy.matrix); });
+    blossomList.forEach((s,i)=>{ dummy.position.set(s.x,0,s.z); dummy.rotation.set(0,s.rot,0); dummy.scale.setScalar(s.scale); dummy.updateMatrix(); blossomMesh.setMatrixAt(i,dummy.matrix); });
+    greenList.forEach((s,i)=>{ dummy.position.set(s.x,0,s.z); dummy.rotation.set(0,s.rot,0); dummy.scale.setScalar(s.scale); dummy.updateMatrix(); greenMesh.setMatrixAt(i,dummy.matrix); });
+    trunkMesh.instanceMatrix.needsUpdate=true; blossomMesh.instanceMatrix.needsUpdate=true; greenMesh.instanceMatrix.needsUpdate=true;
+    scene.add(trunkMesh, blossomMesh, greenMesh);
+  }
+
+  // ---------------------------------------------------------------
+  // PARKOUR TOWER (romantic-style, many floors, fireworks at the top)
+  // ---------------------------------------------------------------
+  function getGroundHeightAt(x, z, previousFeetY){
+    let best = 0; // flat field is the default surface
+    for(const p of towerPlatforms){
+      if(p.active === false) continue; // vanished ghost block — no floor here right now
+      if(x > p.x-p.w && x < p.x+p.w && z > p.z-p.d && z < p.z+p.d){
+        if(p.y <= previousFeetY + 0.18 && p.y > best) best = p.y;
+      }
+    }
+    return best;
+  }
+
+  function createHeartTexture(color){
+    const c=document.createElement('canvas'); c.width=c.height=64;
+    const ctx=c.getContext('2d'); ctx.translate(32,28); ctx.fillStyle=color;
+    ctx.beginPath();
+    ctx.moveTo(0,10);
+    ctx.bezierCurveTo(-24,-14,-14,-30,0,-14);
+    ctx.bezierCurveTo(14,-30,24,-14,0,10);
+    ctx.closePath(); ctx.fill();
+    return new THREE.CanvasTexture(c);
+  }
+
+  function buildTower(){
+    const FLOORS = 28;
+    const RISE = 0.8;
+    const BASE_RADIUS = 2.1;
+    const platMat = [
+      new THREE.MeshLambertMaterial({ color:0xffd7e6 }),
+      new THREE.MeshLambertMaterial({ color:0xe8d9ff }),
+      new THREE.MeshLambertMaterial({ color:0xfff3d9 })
+    ];
+    const goldMat = new THREE.MeshLambertMaterial({ color:0xd8b45a });
+    const checkpointMat = new THREE.MeshLambertMaterial({ color:0xfff2b0 });
+    const heartTex = createHeartTexture('#ff6f9e');
+
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09, FLOORS*RISE+1, 6), goldMat);
+    pillar.position.set(TOWER_POS.x, (FLOORS*RISE)/2, TOWER_POS.z);
+    scene.add(pillar);
+
+    for(let i=0;i<FLOORS;i++){
+      const angle = i * 0.55;
+      const radius = BASE_RADIUS + i*0.045 + (i%2===0 ? 0 : 0.15); // tower widens as it climbs
+      const px = TOWER_POS.x + Math.cos(angle)*radius;
+      const pz = TOWER_POS.z + Math.sin(angle)*radius;
+      const py = 0.9 + i*RISE;
+      const isTop = i === FLOORS-1;
+      const isCheckpoint = isTop || (i>0 && i%5===0);
+      let dynType = 'static';
+      if(!isCheckpoint){
+        if(i%7===3) dynType='spin';
+        else if(i%7===6) dynType='shuttle';
+      }
+      const size = isTop ? 1.2 : (isCheckpoint ? 0.85 : 0.68);
+      const mat = isCheckpoint ? checkpointMat : platMat[i%platMat.length];
+
+      if(dynType==='spin'){
+        const pivot = new THREE.Group();
+        pivot.position.set(px,py,pz);
+        const plat = new THREE.Mesh(new THREE.CylinderGeometry(size,size,0.18,12), mat);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(size,0.035,6,16), goldMat);
+        rim.position.y = 0.1; rim.rotation.x = Math.PI/2;
+        pivot.add(plat, rim);
+        scene.add(pivot);
+        dynamicPlatforms.push({ type:'spin', group:pivot, spinSpeed:(0.5+Math.random()*0.5)*(Math.random()<0.5?1:-1) });
+        towerPlatforms.push({ x:px, y:py+0.09, z:pz, w:size*0.8, d:size*0.8 });
+      } else if(dynType==='shuttle'){
+        const dirA = angle + Math.PI/2;
+        const range = 1.7;
+        const fromX = px - Math.cos(dirA)*range/2, fromZ = pz - Math.sin(dirA)*range/2;
+        const toX   = px + Math.cos(dirA)*range/2, toZ   = pz + Math.sin(dirA)*range/2;
+        const plat = new THREE.Mesh(new THREE.CylinderGeometry(size,size,0.18,12), mat);
+        plat.position.set(fromX,py,fromZ); scene.add(plat);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(size,0.035,6,16), goldMat);
+        rim.position.set(fromX,py+0.1,fromZ); rim.rotation.x = Math.PI/2; scene.add(rim);
+        const entry = { x:fromX, y:py+0.09, z:fromZ, w:size*0.8, d:size*0.8 };
+        towerPlatforms.push(entry);
+        dynamicPlatforms.push({ type:'shuttle', plat, rim, entry, fromX, fromZ, toX, toZ, speed:0.55+Math.random()*0.3, phase:Math.random()*Math.PI*2 });
+      } else {
+        const plat = new THREE.Mesh(new THREE.CylinderGeometry(size,size,0.18,12), mat);
+        plat.position.set(px,py,pz); scene.add(plat);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(size,0.035,6,16), goldMat);
+        rim.position.set(px,py+0.1,pz); rim.rotation.x = Math.PI/2; scene.add(rim);
+        const entry = { x:px, y:py+0.09, z:pz, w:size*0.8, d:size*0.8 };
+        towerPlatforms.push(entry);
+
+        if(isCheckpoint){
+          const marker = new THREE.Sprite(new THREE.SpriteMaterial({ map:createGlowTexture('#fff4c2'), transparent:true, depthWrite:false }));
+          marker.scale.set(1.1,1.1,1);
+          marker.position.set(px, py+0.9, pz);
+          scene.add(marker);
+          checkpointPlatforms.push({ x:entry.x, y:entry.y, z:entry.z, w:entry.w, d:entry.d, claimed:false, marker });
+        }
+        if(isTop){
+          // Section A ends here — the real finale now lives at the end of
+          // the long horizontal sky-path built by buildSkyPath()
+          spiralEndPlatform = entry;
+        }
+      }
+
+      if(i % 3 === 0 && !isCheckpoint){
+        const heart = new THREE.Sprite(new THREE.SpriteMaterial({ map:heartTex, transparent:true }));
+        heart.scale.set(0.3,0.3,1);
+        heart.position.set(px, py+0.5, pz);
+        scene.add(heart);
+      }
+
+      // side branch: the tower also grows outward, not just up
+      if(i % 3 === 2 && !isTop){
+        const bAngle = angle + 0.95;
+        const bRadius = radius + 1.9;
+        const bx = TOWER_POS.x + Math.cos(bAngle)*bRadius;
+        const bz = TOWER_POS.z + Math.sin(bAngle)*bRadius;
+        const bsize = 0.6;
+        const bplat = new THREE.Mesh(new THREE.CylinderGeometry(bsize,bsize,0.18,10), platMat[(i+1)%platMat.length]);
+        bplat.position.set(bx,py,bz); scene.add(bplat);
+        const brim = new THREE.Mesh(new THREE.TorusGeometry(bsize,0.03,6,14), goldMat);
+        brim.position.set(bx,py+0.1,bz); brim.rotation.x = Math.PI/2; scene.add(brim);
+        towerPlatforms.push({ x:bx, y:py+0.09, z:bz, w:bsize*0.8, d:bsize*0.8 });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // SKY PATH — the course's long second half. Instead of climbing
+  // further, it winds far out across the world at roughly this same
+  // height: wide platforms (room for two), ghost blocks, and more
+  // checkpoints. Ends with the fireworks + sky-crawl finale.
+  // ---------------------------------------------------------------
+  function buildSkyPath(){
+    if(!spiralEndPlatform) return;
+    const COUNT = 56;
+    const ANGLE_STEP = 0.065;
+    const RADIUS_VARIANCE = 6;
+    const RADIUS_FREQ = 0.22;
+    const HEIGHT_VARIANCE = 1.3;
+    const baseAngle = Math.atan2(spiralEndPlatform.z, spiralEndPlatform.x);
+    const baseRadius = Math.hypot(spiralEndPlatform.x, spiralEndPlatform.z);
+    const baseY = spiralEndPlatform.y;
+
+    const platMat = [
+      new THREE.MeshLambertMaterial({ color:0xffd7e6 }),
+      new THREE.MeshLambertMaterial({ color:0xe8d9ff }),
+      new THREE.MeshLambertMaterial({ color:0xfff3d9 })
+    ];
+    const goldMat = new THREE.MeshLambertMaterial({ color:0xd8b45a });
+    const checkpointMat = new THREE.MeshLambertMaterial({ color:0xfff2b0 });
+    const heartTex = createHeartTexture('#ff6f9e');
+
+    for(let i=0;i<COUNT;i++){
+      const angle = baseAngle + (i+1)*ANGLE_STEP;
+      const radius = baseRadius + Math.sin(i*RADIUS_FREQ)*RADIUS_VARIANCE;
+      const px = Math.cos(angle)*radius;
+      const pz = Math.sin(angle)*radius;
+      const py = baseY + Math.sin(i*0.2)*HEIGHT_VARIANCE + i*0.015;
+      const isLast = i === COUNT-1;
+      const isCheckpoint = isLast || (i>0 && i%7===0);
+      const isGhost = !isCheckpoint && (i%5===2);
+      let dynType = 'static';
+      if(!isCheckpoint && !isGhost){
+        if(i%9===4) dynType='spin';
+        else if(i%9===7) dynType='shuttle';
+      }
+      const size = isCheckpoint ? 2.1 : 1.8; // big enough for two players to stand together
+      const mat = isGhost ? ghostMat : (isCheckpoint ? checkpointMat : platMat[i%platMat.length]);
+
+      if(dynType==='spin'){
+        const pivot = new THREE.Group();
+        pivot.position.set(px,py,pz);
+        const plat = new THREE.Mesh(new THREE.CylinderGeometry(size,size,0.2,14), mat);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(size,0.04,6,18), goldMat);
+        rim.position.y = 0.11; rim.rotation.x = Math.PI/2;
+        pivot.add(plat, rim);
+        scene.add(pivot);
+        dynamicPlatforms.push({ type:'spin', group:pivot, spinSpeed:(0.4+Math.random()*0.4)*(Math.random()<0.5?1:-1) });
+        towerPlatforms.push({ x:px, y:py+0.1, z:pz, w:size*0.82, d:size*0.82 });
+      } else if(dynType==='shuttle'){
+        const dirA = angle + Math.PI/2;
+        const range = 3.2;
+        const fromX = px - Math.cos(dirA)*range/2, fromZ = pz - Math.sin(dirA)*range/2;
+        const toX   = px + Math.cos(dirA)*range/2, toZ   = pz + Math.sin(dirA)*range/2;
+        const plat = new THREE.Mesh(new THREE.CylinderGeometry(size,size,0.2,14), mat);
+        plat.position.set(fromX,py,fromZ); scene.add(plat);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(size,0.04,6,18), goldMat);
+        rim.position.set(fromX,py+0.11,fromZ); rim.rotation.x = Math.PI/2; scene.add(rim);
+        const entry = { x:fromX, y:py+0.1, z:fromZ, w:size*0.82, d:size*0.82 };
+        towerPlatforms.push(entry);
+        dynamicPlatforms.push({ type:'shuttle', plat, rim, entry, fromX, fromZ, toX, toZ, speed:0.45+Math.random()*0.25, phase:Math.random()*Math.PI*2 });
+      } else if(isGhost){
+        const plat = new THREE.Mesh(new THREE.CylinderGeometry(size,size,0.2,14), ghostMat.clone());
+        plat.position.set(px,py,pz); scene.add(plat);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(size,0.04,6,18), new THREE.MeshBasicMaterial({color:0xbfe8ff, transparent:true}));
+        rim.position.set(px,py+0.11,pz); rim.rotation.x = Math.PI/2; scene.add(rim);
+        const entry = { x:px, y:py+0.1, z:pz, w:size*0.82, d:size*0.82, active:true };
+        towerPlatforms.push(entry);
+        ghostPlatforms.push({ entry, mesh:plat, rim, state:'solid', timer:0 });
+      } else {
+        const plat = new THREE.Mesh(new THREE.CylinderGeometry(size,size,0.2,14), mat);
+        plat.position.set(px,py,pz); scene.add(plat);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(size,0.04,6,18), goldMat);
+        rim.position.set(px,py+0.11,pz); rim.rotation.x = Math.PI/2; scene.add(rim);
+        const entry = { x:px, y:py+0.1, z:pz, w:size*0.82, d:size*0.82 };
+        towerPlatforms.push(entry);
+
+        if(isCheckpoint){
+          const marker = new THREE.Sprite(new THREE.SpriteMaterial({ map:createGlowTexture('#fff4c2'), transparent:true, depthWrite:false }));
+          marker.scale.set(1.2,1.2,1);
+          marker.position.set(px, py+1.0, pz);
+          scene.add(marker);
+          checkpointPlatforms.push({ x:entry.x, y:entry.y, z:entry.z, w:entry.w, d:entry.d, claimed:false, marker });
+        }
+        if(isLast){
+          towerTopPlatform = entry;
+          const beacon = new THREE.Sprite(new THREE.SpriteMaterial({ map:createGlowTexture('#ff8fb8'), transparent:true, depthWrite:false }));
+          beacon.scale.set(3.6,3.6,1);
+          beacon.position.set(px, py+2.4, pz);
+          scene.add(beacon);
+          beaconSprite = beacon;
+
+          skyTextSprite = createSkyCrawl();
+          skyTextSprite.position.set(px, py+9, pz - 5);
+          scene.add(skyTextSprite);
+        }
+      }
+
+      if(i % 4 === 0 && !isCheckpoint && !isGhost){
+        const heart = new THREE.Sprite(new THREE.SpriteMaterial({ map:heartTex, transparent:true }));
+        heart.scale.set(0.32,0.32,1);
+        heart.position.set(px, py+0.65, pz);
+        scene.add(heart);
+      }
+    }
+  }
+
+  let beaconSprite = null;
+  let skyTextSprite = null;
+  let skyTextRevealed = false;
+  function updateTowerBeacon(t){
+    if(!beaconSprite) return;
+    const s = 3.2 + Math.sin(t*2.2)*0.4;
+    beaconSprite.scale.set(s,s,1);
+  }
+
+  function createSkyCrawlTexture(text){
+    const lines = text.split('\n');
+    const W = 900, lineH = 130;
+    const H = Math.max(1300, lines.length*lineH + 950); // extra blank space = a pause before it loops
+    const c = document.createElement('canvas'); c.width=W; c.height=H;
+    const ctx = c.getContext('2d');
+    ctx.textAlign='center';
+    ctx.shadowColor='rgba(255,255,255,0.55)'; ctx.shadowBlur=14;
+    ctx.fillStyle='rgba(255,214,120,0.98)';
+    ctx.font='bold 96px Georgia, serif';
+    let y = H - 300;
+    for(const line of lines){
+      ctx.fillText(line, W/2, y);
+      y -= lineH;
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 950/H); // the visible "window" is a fixed slice of the tall strip
+    return tex;
+  }
+  function createSkyCrawl(){
+    const tex = createSkyCrawlTexture(SKY_FINALE_TEXT);
+    const geo = new THREE.PlaneGeometry(26, 15);
+    const mat = new THREE.MeshBasicMaterial({ map:tex, transparent:true, opacity:0, side:THREE.DoubleSide, depthWrite:false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -0.6; // leans back into the sky, Star-Wars-crawl style
+    return mesh;
+  }
+  function revealSkyText(){ skyTextRevealed = true; }
+
+  // ---------------------------------------------------------------
+  // DYNAMIC PLATFORMS + CHECKPOINTS
+  // ---------------------------------------------------------------
+  let dynamicPlatforms = [];
+  let checkpointPlatforms = [];
+  let lastCheckpoint = null;
+  let ghostPlatforms = [];
+  const ghostMat = new THREE.MeshLambertMaterial({ color:0xbfe8ff, transparent:true, opacity:1 });
+
+  function updateCheckpointSlotState(){
+    const el = document.getElementById('slotCheckpoint');
+    if(el) el.classList.toggle('disabled', !lastCheckpoint);
+  }
+  function teleportToCheckpoint(){
+    if(!lastCheckpoint) return;
+    yawObject.position.x = lastCheckpoint.x;
+    yawObject.position.z = lastCheckpoint.z;
+    feetY = lastCheckpoint.y;
+    velY = 0; grounded = true;
+  }
+  function flashCheckpoint(cp){
+    const start = clock.elapsedTime;
+    (function pulse(){
+      const e = clock.elapsedTime - start;
+      if(e > 0.6){ cp.marker.scale.set(1.1,1.1,1); return; }
+      const s = 1.1 + Math.sin(e*20)*0.35*(1-e/0.6);
+      cp.marker.scale.set(s,s,1);
+      requestAnimationFrame(pulse);
+    })();
+  }
+
+  function updateTowerDynamics(dt,t){
+    for(const dp of dynamicPlatforms){
+      if(dp.type==='spin'){
+        dp.group.rotation.y += dp.spinSpeed*dt;
+      } else if(dp.type==='shuttle'){
+        const f = (Math.sin(t*dp.speed+dp.phase)+1)/2;
+        const newX = dp.fromX + (dp.toX-dp.fromX)*f;
+        const newZ = dp.fromZ + (dp.toZ-dp.fromZ)*f;
+        const dx = newX - dp.entry.x, dz = newZ - dp.entry.z;
+        if(grounded && Math.abs(feetY-dp.entry.y)<0.12 &&
+           Math.abs(yawObject.position.x-dp.entry.x)<dp.entry.w &&
+           Math.abs(yawObject.position.z-dp.entry.z)<dp.entry.d){
+          yawObject.position.x += dx;
+          yawObject.position.z += dz;
+        }
+        dp.entry.x = newX; dp.entry.z = newZ;
+        dp.plat.position.x = newX; dp.plat.position.z = newZ;
+        dp.rim.position.x = newX; dp.rim.position.z = newZ;
+      }
+    }
+
+    for(const gp of ghostPlatforms){
+      if(gp.state === 'solid'){
+        if(grounded && Math.abs(feetY-gp.entry.y)<0.1 &&
+           Math.abs(yawObject.position.x-gp.entry.x)<gp.entry.w &&
+           Math.abs(yawObject.position.z-gp.entry.z)<gp.entry.d){
+          gp.state = 'warning';
+          gp.timer = 0;
+        }
+      } else if(gp.state === 'warning'){
+        gp.timer += dt;
+        gp.mesh.material.opacity = (Math.sin(gp.timer*30) > 0) ? 1 : 0.3;
+        gp.rim.material.opacity = gp.mesh.material.opacity;
+        if(gp.timer > 0.55){
+          gp.state = 'gone';
+          gp.timer = 0;
+          gp.entry.active = false;
+          gp.mesh.visible = false;
+          gp.rim.visible = false;
+        }
+      } else if(gp.state === 'gone'){
+        gp.timer += dt;
+        if(gp.timer > 3.4){
+          gp.state = 'solid';
+          gp.timer = 0;
+          gp.entry.active = true;
+          gp.mesh.visible = true;
+          gp.rim.visible = true;
+          gp.mesh.material.opacity = 1;
+          gp.rim.material.opacity = 1;
+        }
+      }
+    }
+
+    for(const cp of checkpointPlatforms){
+      if(cp.claimed) continue;
+      if(grounded && Math.abs(feetY-cp.y)<0.08 &&
+         Math.abs(yawObject.position.x-cp.x)<cp.w && Math.abs(yawObject.position.z-cp.z)<cp.d){
+        cp.claimed = true;
+        lastCheckpoint = { x:cp.x, y:cp.y, z:cp.z };
+        flashCheckpoint(cp);
+        updateCheckpointSlotState();
+      }
+    }
+
+    if(skyTextSprite){
+      const target = skyTextRevealed ? 1 : 0;
+      if(Math.abs(skyTextSprite.material.opacity-target) > 0.005){
+        skyTextSprite.material.opacity += (target-skyTextSprite.material.opacity) * Math.min(dt*0.7,1);
+      }
+      if(skyTextRevealed){
+        skyTextSprite.material.map.offset.y += dt*0.045; // the crawl scrolls forever, RepeatWrapping loops it
+      }
+    }
+  }
+
+  function spawnFireworkBurst(origin, color){
+    const N = 70;
+    const positions = new Float32Array(N*3);
+    const velocities = [];
+    for(let i=0;i<N;i++){
+      positions[i*3]=origin.x; positions[i*3+1]=origin.y; positions[i*3+2]=origin.z;
+      const theta = Math.random()*Math.PI*2, phi = Math.random()*Math.PI;
+      const speed = 2.6+Math.random()*2.4;
+      velocities.push({
+        x: Math.sin(phi)*Math.cos(theta)*speed,
+        y: Math.cos(phi)*speed*0.7 + 1.8,
+        z: Math.sin(phi)*Math.sin(theta)*speed
+      });
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+    const mat = new THREE.PointsMaterial({ color, size:0.16, transparent:true, opacity:1, blending:THREE.AdditiveBlending, depthWrite:false });
+    const points = new THREE.Points(geo, mat);
+    scene.add(points);
+    activeFireworks.push({ points, velocities, born: clock.elapsedTime, life:1.7 });
+  }
+
+  function triggerFireworks(){
+    if(!towerTopPlatform) return;
+    revealSkyText();
+    const base = { x:towerTopPlatform.x, y:towerTopPlatform.y+3.5, z:towerTopPlatform.z };
+    const colors = [0xff6fa5, 0xffd23f, 0xa084ff, 0x8fd9c4, 0xffffff, 0xff9ec7];
+    colors.forEach((c,i)=>{
+      setTimeout(()=> spawnFireworkBurst({
+        x:base.x+(Math.random()-0.5)*3, y:base.y+(Math.random()-0.5)*1.6, z:base.z+(Math.random()-0.5)*3
+      }, c), i*320);
+    });
+  }
+
+  function updateFireworks(dt,t){
+    updateTowerBeacon(t);
+    for(let i=activeFireworks.length-1;i>=0;i--){
+      const fw = activeFireworks[i];
+      const age = t - fw.born;
+      if(age > fw.life){
+        scene.remove(fw.points);
+        fw.points.geometry.dispose(); fw.points.material.dispose();
+        activeFireworks.splice(i,1);
+        continue;
+      }
+      const arr = fw.points.geometry.attributes.position.array;
+      for(let j=0;j<fw.velocities.length;j++){
+        const v = fw.velocities[j];
+        v.y -= 4.5*dt;
+        arr[j*3]   += v.x*dt;
+        arr[j*3+1] += v.y*dt;
+        arr[j*3+2] += v.z*dt;
+      }
+      fw.points.geometry.attributes.position.needsUpdate = true;
+      fw.points.material.opacity = 1 - (age/fw.life);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // ALTAR
+  // ---------------------------------------------------------------
+  function buildAltar(){
+    const group=new THREE.Group(); group.position.set(ALTAR.x,0,ALTAR.z);
+    const woodMat=new THREE.MeshLambertMaterial({color:0xd8c9a3});
+    const arch=new THREE.Mesh(new THREE.TorusGeometry(2.15,0.09,8,28,Math.PI), woodMat);
+    group.add(arch);
+    const lightMat=new THREE.MeshBasicMaterial({color:0xffe9a8});
+    const lightGeo=new THREE.SphereGeometry(0.045,6,6);
+    const N=16;
+    for(let i=0;i<=N;i++){
+      const theta=Math.PI*(i/N), x=Math.cos(theta)*2.15, y=Math.sin(theta)*2.15;
+      if(i%2===0){
+        const tex=flowerTextures[i%flowerTextures.length];
+        const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true}));
+        spr.scale.set(0.4,0.4,1); spr.position.set(x,y,0.12); group.add(spr);
+        const spr2=spr.clone(); spr2.position.z=-0.12; group.add(spr2);
+      } else {
+        const light=new THREE.Mesh(lightGeo, lightMat); light.position.set(x,y,0.05); group.add(light);
+      }
+    }
+    const table=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.7,0.5), woodMat);
+    table.position.set(0,0.35,0); group.add(table);
+    for(let i=0;i<5;i++){
+      const tex=flowerTextures[i%flowerTextures.length];
+      const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true}));
+      spr.scale.set(0.28,0.28,1);
+      spr.position.set((Math.random()-0.5)*0.4, 0.75+Math.random()*0.15, (Math.random()-0.5)*0.25);
+      group.add(spr);
+    }
+    scene.add(group);
+  }
+
+  // ---------------------------------------------------------------
+  // PRIEST (static NPC + real wedding ceremony with vows)
+  // ---------------------------------------------------------------
+  let priestMesh = null;
+  let priestBubble = null, priestBubbleTimer = null;
+  const PRIEST_POS = { x: ALTAR.x, z: ALTAR.z - 1.15 };
+
+  function createPriest(){
+    const group = new THREE.Group();
+    const robeMat = new THREE.MeshLambertMaterial({ color:0x4a3560 });
+    const trimMat = new THREE.MeshLambertMaterial({ color:0xd8c26a });
+    const skin = new THREE.MeshLambertMaterial({ color:0xe8b48a });
+    const hairMat = new THREE.MeshLambertMaterial({ color:0xd9d9d9 });
+
+    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.36, 1.15, 10), robeMat);
+    robe.position.y = 0.58; group.add(robe);
+
+    const sash = new THREE.Mesh(new THREE.CylinderGeometry(0.31,0.34,0.1,10), trimMat);
+    sash.position.y = 0.78; group.add(sash);
+
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.07,0.16,6), skin);
+    neck.position.y = 1.25; group.add(neck);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.165,10,8), skin);
+    head.position.y = 1.4; group.add(head);
+
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.175,10,8,0,Math.PI*2,0,Math.PI*0.5), hairMat);
+    hair.position.set(0,1.46,0); group.add(hair);
+
+    for(const side of [-1,1]){
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.05,0.5,6), robeMat);
+      arm.position.set(side*0.3, 0.98, 0.05);
+      arm.rotation.z = side * 0.35;
+      group.add(arm);
+    }
+
+    const book = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.12,0.03), new THREE.MeshLambertMaterial({color:0xf2e6c9}));
+    book.position.set(0, 0.95, 0.22);
+    book.rotation.x = -0.4;
+    group.add(book);
+
+    group.position.set(PRIEST_POS.x, 0, PRIEST_POS.z);
+    group.rotation.y = 0; // front (+Z) faces the approaching players
+    return group;
+  }
+
+  function buildPriest(){
+    priestMesh = createPriest();
+    scene.add(priestMesh);
+  }
+
+  function sayLine(text){
+    const lineEl = document.getElementById('dialogueLine');
+    lineEl.textContent = text;
+    return new Promise(resolve=>{
+      if(priestMesh){
+        if(priestBubble){ priestMesh.remove(priestBubble); priestBubble=null; }
+        if(priestBubbleTimer) clearTimeout(priestBubbleTimer);
+        const bubble = createChatBubble(text);
+        bubble.position.y = 1.98;
+        priestMesh.add(bubble);
+        priestBubble = bubble;
+        const duration = Math.min(Math.max(text.length*75, 3200), 8000);
+        priestBubbleTimer = setTimeout(()=>{
+          if(priestBubble){ priestMesh.remove(priestBubble); priestBubble=null; }
+        }, duration - 300);
+        setTimeout(resolve, duration);
+      } else {
+        setTimeout(resolve, 3800);
+      }
+    });
+  }
+
+  function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+  // decision points: only the addressed player answers; both screens stay synced
+  let currentAnswerField = null;
+  const pendingLocalResolvers = {};
+
+  function waitForAnswer(field){
+    return new Promise(resolve=>{
+      if(multiplayerEnabled && roomRef){
+        const ref = roomRef.child('ceremony/' + field);
+        const handler = snap=>{
+          const val = snap.val();
+          if(val){ ref.off('value', handler); resolve(val); }
+        };
+        ref.on('value', handler);
+      } else {
+        pendingLocalResolvers[field] = resolve;
+      }
+    });
+  }
+
+  function showVowButtons(field, forCharacter){
+    currentAnswerField = field;
+    const btns = document.getElementById('vowButtons');
+    const waitNote = document.getElementById('waitingNote');
+    const canAnswer = !multiplayerEnabled || myCharacter === forCharacter;
+    if(canAnswer){
+      btns.classList.add('show');
+      waitNote.classList.remove('show');
+    } else {
+      btns.classList.remove('show');
+      waitNote.textContent = 'Esperando la respuesta de ' + (forCharacter==='leyma' ? 'Leyma' : 'Sam') + '...';
+      waitNote.classList.add('show');
+    }
+  }
+  function hideVowButtons(){
+    document.getElementById('vowButtons').classList.remove('show');
+    document.getElementById('waitingNote').classList.remove('show');
+    currentAnswerField = null;
+  }
+  function submitVowAnswer(value){
+    if(!currentAnswerField) return;
+    const field = currentAnswerField;
+    hideVowButtons();
+    if(multiplayerEnabled && roomRef){
+      roomRef.child('ceremony/' + field).set(value);
+    } else if(pendingLocalResolvers[field]){
+      pendingLocalResolvers[field](value);
+      delete pendingLocalResolvers[field];
+    }
+  }
+
+  async function playCeremony(){
+    const box = document.getElementById('dialogueBox');
+    box.classList.add('show');
+
+    await sayLine("Queridos presentes, hoy nos reunimos bajo este cielo mágico para celebrar el matrimonio de Leyma Daniela y Sam. No una simple amistad, sino una boda: la unión de dos vidas en una sola.");
+    await sayLine("El matrimonio es la promesa más sagrada que existe: entregarse a la otra persona en cuerpo, corazón y alma, sin reservas, para toda la vida.");
+
+    await sayLine("Leyma Daniela, ¿tomas a Sam como tu esposo? ¿Prometes amarlo, desearlo y confiar en él sin dudarlo jamás, entregándole tu corazón y tu ser por completo, en la alegría y en la tristeza, hoy, mañana y siempre?");
+    showVowButtons('leymaAnswer', 'leyma');
+    const leymaAns = await waitForAnswer('leymaAnswer');
+    hideVowButtons();
+    if(leymaAns !== 'yes'){
+      await sayLine("Vaya... el corazón tiene sus propios tiempos. Quizás este no era el momento. 💔");
+      endCeremony();
+      return;
+    }
+    await sayLine("Leyma Daniela ha dicho que sí, con todo su corazón. 💗");
+
+    await sayLine("Sam, ¿tomas a Leyma Daniela como tu esposa? ¿Prometes amarla, desearla y confiar en ella sin dudarlo jamás, entregándole tu corazón y tu ser por completo, en la alegría y en la tristeza, hoy, mañana y siempre?");
+    showVowButtons('samAnswer', 'sam');
+    const samAns = await waitForAnswer('samAnswer');
+    hideVowButtons();
+    if(samAns !== 'yes'){
+      await sayLine("El silencio también es una respuesta... quizás el destino tiene otros planes. 💔");
+      endCeremony();
+      return;
+    }
+    await sayLine("Sam también ha dicho que sí, sin dudarlo. 💗");
+
+    await sayLine("Por el poder que me confiere este campo encantado... ¡los declaro marido y mujer!");
+    await sayLine("Pueden sellar este momento ante todos los presentes. 💍🎉");
+    endCeremony();
+  }
+
+  function endCeremony(){
+    hideVowButtons();
+    setTimeout(()=> document.getElementById('dialogueBox').classList.remove('show'), 1400);
+  }
+
+  let lastCeremonyTs = 0;
+  function triggerCeremony(){
+    if(multiplayerEnabled && roomRef){
+      roomRef.child('ceremony').set({ startedAt: firebase.database.ServerValue.TIMESTAMP, by: myPlayerId });
+    } else {
+      playCeremony();
+    }
+  }
+
+  function setupInteract(){
+    const btn = document.getElementById('interactBtn');
+    btn.addEventListener('click', triggerCeremony);
+    document.getElementById('vowYes').addEventListener('click', ()=> submitVowAnswer('yes'));
+    document.getElementById('vowNo').addEventListener('click', ()=> submitVowAnswer('no'));
+  }
+
+  // ---------------------------------------------------------------
+  // CHARACTERS (used for remote players)
+  // ---------------------------------------------------------------
+  function createCharacter(kind){
+    const group=new THREE.Group();
+    const skin=new THREE.MeshLambertMaterial({color:0xf2c39c});
+    if(kind==='leyma'){
+      const dressMat=new THREE.MeshLambertMaterial({color:0xfff7f0});
+      const hairMat=new THREE.MeshLambertMaterial({color:0x7a4a28});
+      const skirt=new THREE.Mesh(new THREE.ConeGeometry(0.34,0.62,10), dressMat); skirt.position.y=0.31; group.add(skirt);
+      const bodice=new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.24,0.32,8), dressMat); bodice.position.y=0.78; group.add(bodice);
+      const head=new THREE.Mesh(new THREE.SphereGeometry(0.16,10,8), skin); head.position.y=1.06; group.add(head);
+      const hair=new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8), hairMat); hair.position.set(0,1.08,-0.03); hair.scale.set(1,1.05,1); group.add(hair);
+      const veil=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.5,8,1,true), new THREE.MeshLambertMaterial({color:0xffffff, transparent:true, opacity:0.55, side:THREE.DoubleSide}));
+      veil.position.set(0,0.95,-0.05); veil.rotation.x=Math.PI; group.add(veil);
+      for(const side of [-1,1]){
+        const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.04,0.42,6), dressMat);
+        arm.position.set(side*0.24,0.7,0.02); arm.rotation.z=side*0.32; group.add(arm);
+      }
+    } else {
+      const suitMat=new THREE.MeshLambertMaterial({color:0x2c3550});
+      const hairMat=new THREE.MeshLambertMaterial({color:0x2a1c12});
+      const bowMat=new THREE.MeshLambertMaterial({color:0x8a1f3d});
+      for(const side of [-1,1]){
+        const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.075,0.62,6), suitMat);
+        leg.position.set(side*0.1,0.31,0); group.add(leg);
+      }
+      const torso=new THREE.Mesh(new THREE.BoxGeometry(0.46,0.52,0.26), suitMat); torso.position.y=0.9; group.add(torso);
+      const head=new THREE.Mesh(new THREE.SphereGeometry(0.165,10,8), skin); head.position.y=1.36; group.add(head);
+      const hair=new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8,0,Math.PI*2,0,Math.PI*0.55), hairMat); hair.position.set(0,1.42,0); group.add(hair);
+      const bow=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.06,0.06), bowMat); bow.position.set(0,1.19,0.14); group.add(bow);
+      const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.07,0.18,6), skin); neck.position.set(0,1.24,0); group.add(neck);
+      for(const side of [-1,1]){
+        const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.05,0.48,6), suitMat);
+        arm.position.set(side*0.28,0.85,0.02); arm.rotation.z=side*0.28; group.add(arm);
+      }
+    }
+    return group;
+  }
+
+  function createNameSprite(text){
+    const c=document.createElement('canvas'); c.width=128; c.height=40;
+    const ctx=c.getContext('2d');
+    ctx.font='bold 24px Segoe UI'; ctx.textAlign='center';
+    ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(0,4,128,32);
+    ctx.fillStyle='#fff'; ctx.fillText(text,64,28);
+    const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), transparent:true, depthWrite:false}));
+    spr.scale.set(0.9,0.28,1);
+    return spr;
+  }
+
+  function roundRect(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+  function createChatBubble(text){
+    const maxLen=42;
+    const txt = text.length>maxLen ? text.slice(0,maxLen)+'…' : text;
+    const fontSize=22;
+    const measure=document.createElement('canvas').getContext('2d');
+    measure.font=fontSize+'px Segoe UI';
+    const textWidth=measure.measureText(txt).width;
+    const w=Math.min(Math.max(textWidth+36,80),300), h=54;
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    const ctx=c.getContext('2d');
+    ctx.font=fontSize+'px Segoe UI';
+    ctx.fillStyle='rgba(255,255,255,0.95)';
+    roundRect(ctx,1,1,w-2,h-2,16); ctx.fill();
+    ctx.fillStyle='#3a2140'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(txt, w/2, h/2);
+    const spr=new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), transparent:true, depthWrite:false }));
+    const scaleH=0.34;
+    spr.scale.set(scaleH*(w/h), scaleH, 1);
+    return spr;
+  }
+
+  function showChatBubble(playerId, text){
+    const rp = remotePlayers[playerId];
+    if(!rp) return;
+    if(rp.chatBubble){ rp.mesh.remove(rp.chatBubble); rp.chatBubble=null; }
+    if(rp.chatBubbleTimer){ clearTimeout(rp.chatBubbleTimer); }
+    const bubble = createChatBubble(text);
+    bubble.position.y = 1.98;
+    rp.mesh.add(bubble);
+    rp.chatBubble = bubble;
+    rp.chatBubbleTimer = setTimeout(()=>{
+      if(rp.chatBubble){ rp.mesh.remove(rp.chatBubble); rp.chatBubble=null; }
+    }, 5000);
+  }
+
+  function appendChatHistory(name, text){
+    const hist = document.getElementById('chatHistory');
+    const div = document.createElement('div');
+    div.className = 'msg';
+    div.innerHTML = '<b>' + name + ':</b> ' + text;
+    hist.appendChild(div);
+    while(hist.children.length > 30) hist.removeChild(hist.firstChild);
+    hist.scrollTop = hist.scrollHeight;
+  }
+
+  function handleIncomingMessage(msg){
+    if(!msg) return;
+    appendChatHistory(msg.name || '???', msg.text || '');
+    if(msg.from && msg.from !== myPlayerId){
+      showChatBubble(msg.from, msg.text || '');
+    }
+  }
+
+  function sendChatMessage(){
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if(!text) return;
+    input.value = '';
+    const payload = {
+      from: myPlayerId,
+      name: myCharacter==='leyma' ? 'Leyma' : 'Sam',
+      character: myCharacter,
+      text
+    };
+    if(multiplayerEnabled){
+      payload.ts = firebase.database.ServerValue.TIMESTAMP;
+      roomRef.child('chat').push(payload);
+    } else {
+      handleIncomingMessage(payload);
+    }
+  }
+
+  function setupChatUI(){
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('chatSend');
+    const emojiToggle = document.getElementById('emojiToggle');
+    const emojiPanel = document.getElementById('emojiPanel');
+
+    sendBtn.addEventListener('click', sendChatMessage);
+    input.addEventListener('keydown', e=>{
+      if(e.key === 'Enter') sendChatMessage();
+      e.stopPropagation();
+    });
+    emojiToggle.addEventListener('click', ()=> emojiPanel.classList.toggle('open'));
+    emojiPanel.querySelectorAll('span').forEach(spanEl=>{
+      spanEl.addEventListener('click', ()=>{
+        input.value += spanEl.textContent;
+        input.focus();
+      });
+    });
+    // prevent game controls from stealing focus while typing
+    ['keydown','keyup'].forEach(evt=>{
+      input.addEventListener(evt, e=> e.stopPropagation());
+    });
+
+    // collapsible chat — handy in landscape, where it can cover the view
+    const chatBox = document.getElementById('chatBox');
+    const chatToggle = document.getElementById('chatToggle');
+    chatToggle.addEventListener('click', ()=>{
+      const collapsed = chatBox.classList.toggle('collapsed');
+      chatToggle.textContent = collapsed ? '▸' : '▾ ocultar';
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // AMBIENT BALLOONS
+  // ---------------------------------------------------------------
+  function buildAmbientBalloons(){
+    const colors=[0xff9ec7,0xa084ff,0xffd23f,0x8fd9c4,0xffffff,0xffb98a];
+    const balloonGeo=new THREE.SphereGeometry(0.55,10,10); balloonGeo.scale(1,1.2,1);
+    const stringMat=new THREE.LineBasicMaterial({color:0x8a7a6a, transparent:true, opacity:0.5});
+    for(let i=0;i<16;i++){
+      const balloon=new THREE.Mesh(balloonGeo, new THREE.MeshLambertMaterial({color:colors[i%colors.length]}));
+      const a=Math.random()*Math.PI*2, r=6+Math.random()*FIELD_RADIUS*0.85;
+      const baseX=Math.cos(a)*r, baseZ=Math.sin(a)*r, baseY=9+Math.random()*14;
+      balloon.position.set(baseX,baseY,baseZ);
+      scene.add(balloon);
+      const strGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-0.55,0), new THREE.Vector3(0,-1.15,0)]);
+      balloon.add(new THREE.Line(strGeo, stringMat));
+      balloonsAmbient.push({mesh:balloon, baseX, baseY, baseZ, phase:Math.random()*Math.PI*2, speed:0.15+Math.random()*0.2});
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // PETALS
+  // ---------------------------------------------------------------
+  function buildPetals(){
+    const COUNT=70;
+    const geo=new THREE.PlaneGeometry(0.09,0.09);
+    const mat=new THREE.MeshBasicMaterial({color:0xffc4dd, transparent:true, opacity:0.9, side:THREE.DoubleSide, depthWrite:false});
+    petalMesh=new THREE.InstancedMesh(geo, mat, COUNT);
+    for(let i=0;i<COUNT;i++){
+      petalData.push({ x:(Math.random()*2-1)*30+ALTAR.x, z:(Math.random()*2-1)*30+ALTAR.z+10, y:Math.random()*10, speed:0.25+Math.random()*0.35, phase:Math.random()*Math.PI*2, rot:Math.random()*Math.PI });
+    }
+    scene.add(petalMesh);
+  }
+  function updatePetals(dt,t){
+    const dummy=new THREE.Object3D();
+    for(let i=0;i<petalData.length;i++){
+      const p=petalData[i]; p.y-=p.speed*dt; if(p.y<0) p.y=9+Math.random()*3;
+      const sway=Math.sin(t*0.8+p.phase)*0.6;
+      dummy.position.set(p.x+sway,p.y,p.z); dummy.rotation.set(t*0.5+p.phase,p.rot,t*0.3); dummy.updateMatrix();
+      petalMesh.setMatrixAt(i,dummy.matrix);
+    }
+    petalMesh.instanceMatrix.needsUpdate=true;
+  }
+  function updateAmbientBalloons(t){
+    balloonsAmbient.forEach(b=>{
+      b.mesh.position.y=b.baseY+Math.sin(t*b.speed+b.phase)*1.1;
+      b.mesh.position.x=b.baseX+Math.sin(t*b.speed*0.6+b.phase)*1.6;
+      b.mesh.position.z=b.baseZ+Math.cos(t*b.speed*0.6+b.phase)*1.6;
+      b.mesh.rotation.z=Math.sin(t*b.speed+b.phase)*0.08;
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // FIREFLIES
+  // ---------------------------------------------------------------
+  function buildFireflies(){
+    const N=140;
+    const geo=new THREE.BufferGeometry();
+    const positions=new Float32Array(N*3);
+    for(let i=0;i<N;i++){
+      let x,z;
+      const a=Math.random()*Math.PI*2, r=Math.random()*FIELD_RADIUS*0.9;
+      x=Math.cos(a)*r; z=Math.sin(a)*r;
+      const y=0.3+Math.random()*1.9;
+      positions[i*3]=x; positions[i*3+1]=y; positions[i*3+2]=z;
+      fireflyData.push({ baseX:x, baseY:y, baseZ:z, phase:Math.random()*Math.PI*2, speed:0.3+Math.random()*0.5 });
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+    const mat=new THREE.PointsMaterial({ map:createGlowTexture('#fff6a8'), color:0xfff6a8, size:0.35, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true });
+    fireflyPoints=new THREE.Points(geo, mat);
+    scene.add(fireflyPoints);
+  }
+  function updateFireflies(t){
+    const arr=fireflyPoints.geometry.attributes.position.array;
+    for(let i=0;i<fireflyData.length;i++){
+      const f=fireflyData[i];
+      arr[i*3]   = f.baseX + Math.sin(t*f.speed+f.phase)*1.4;
+      arr[i*3+1] = f.baseY + Math.sin(t*f.speed*1.7+f.phase)*0.4 + 0.3;
+      arr[i*3+2] = f.baseZ + Math.cos(t*f.speed+f.phase)*1.4;
+    }
+    fireflyPoints.geometry.attributes.position.needsUpdate=true;
+    fireflyPoints.material.opacity = 0.6 + Math.sin(t*3)*0.25;
+  }
+
+  // ---------------------------------------------------------------
+  // WORLD ITEMS (inventory pickups)
+  // ---------------------------------------------------------------
+  function randomFieldSpot(){
+    let x,z,r;
+    do { x=(Math.random()*2-1)*FIELD_RADIUS*0.85; z=(Math.random()*2-1)*FIELD_RADIUS*0.85; r=Math.hypot(x,z); }
+    while(r<8 || tooCloseToAltar(x,z) || tooCloseToTower(x,z));
+    return {x,z};
+  }
+  function createPizzaMesh(){
+    const c=document.createElement('canvas'); c.width=c.height=64;
+    const ctx=c.getContext('2d');
+    ctx.translate(32,32);
+    ctx.fillStyle='#f2b23c'; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,28,-0.5,0.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#d94b3c';
+    for(const [dx,dy] of [[10,-6],[16,4],[6,10]]){ ctx.beginPath(); ctx.arc(dx,dy,3,0,Math.PI*2); ctx.fill(); }
+    const spr=new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), transparent:true }));
+    spr.scale.set(0.5,0.5,1);
+    return spr;
+  }
+  function createBalloonPickup(){
+    const g=new THREE.Group();
+    const colors=[0xff9ec7,0xa084ff,0xffd23f,0x8fd9c4];
+    const balloon=new THREE.Mesh(new THREE.SphereGeometry(0.28,10,10), new THREE.MeshLambertMaterial({color:colors[Math.floor(Math.random()*colors.length)]}));
+    balloon.scale.set(1,1.2,1); balloon.position.y=0.5;
+    g.add(balloon);
+    return g;
+  }
+  function createPelucheMesh(){
+    const g=new THREE.Group();
+    const furMat=new THREE.MeshLambertMaterial({color:0xa8703f});
+    const body=new THREE.Mesh(new THREE.SphereGeometry(0.18,8,8), furMat); body.position.y=0.2; g.add(body);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(0.13,8,8), furMat); head.position.y=0.42; g.add(head);
+    for(const side of [-1,1]){
+      const ear=new THREE.Mesh(new THREE.SphereGeometry(0.05,6,6), furMat);
+      ear.position.set(side*0.1, 0.52, 0); g.add(ear);
+    }
+    return g;
+  }
+
+  function buildWorldItems(){
+    const specs = [];
+    for(let i=0;i<6;i++) specs.push({ type:'pizza' });
+    for(let i=0;i<6;i++) specs.push({ type:'balloon' });
+    for(let i=0;i<4;i++) specs.push({ type:'peluche' });
+
+    specs.forEach((s,i)=>{
+      const spot = randomFieldSpot();
+      const id = 'item' + i;
+      let mesh;
+      if(s.type==='pizza') mesh = createPizzaMesh();
+      else if(s.type==='balloon') mesh = createBalloonPickup();
+      else mesh = createPelucheMesh();
+      mesh.position.set(spot.x, 0, spot.z);
+      scene.add(mesh);
+      worldItems.push({ id, type:s.type, mesh, x:spot.x, z:spot.z, taken:false, phase:Math.random()*Math.PI*2 });
+    });
+
+    if(multiplayerEnabled){
+      const itemsRef = db.ref('rooms/' + roomCode + '/items');
+      itemsRef.once('value').then(snap=>{
+        if(!snap.exists()){
+          const initial = {};
+          worldItems.forEach(it=>{ initial[it.id] = { taken:false }; });
+          itemsRef.set(initial);
+        }
+      });
+      itemsRef.on('value', snap=>{
+        const data = snap.val() || {};
+        worldItems.forEach(it=>{
+          const remoteState = data[it.id];
+          if(remoteState && remoteState.taken && !it.taken){
+            it.taken = true;
+            scene.remove(it.mesh);
+          }
+        });
+      });
+    }
+  }
+
+  function updateWorldItems(t){
+    worldItems.forEach(it=>{
+      if(it.taken) return;
+      it.mesh.position.y = 0.15 + Math.sin(t*1.5+it.phase)*0.08 + (it.type==='balloon'?0.5:0);
+      it.mesh.rotation.y = t*0.6 + it.phase;
+      const dx = it.x - yawObject.position.x, dz = it.z - yawObject.position.z;
+      if(Math.hypot(dx,dz) < 1.3){
+        collectItem(it);
+      }
+    });
+  }
+  function collectItem(it){
+    it.taken = true;
+    scene.remove(it.mesh);
+    inventory[it.type]++;
+    updateInventoryUI();
+    if(multiplayerEnabled){
+      db.ref('rooms/' + roomCode + '/items/' + it.id).update({ taken:true, by:myPlayerId });
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // 🧙‍♀️ EASTER EGG — the witch. Appears once, after roughly 15–20
+  // minutes of play, chases whoever is on that device, and can be
+  // banished by collecting 5 apples scattered across the field.
+  // (Local per-player — she is not synced between Leyma's and Sam's
+  // screens.)
+  // ---------------------------------------------------------------
+  const WITCH_SPAWN_DELAY = 900 + Math.random()*300; // 15–20 minutes, in seconds
+  const APPLES_NEEDED = 5;
+  const MAX_WITCHES = 4;
+  let witchEverTriggered = false;
+  let witchActive = false;
+  let witches = []; // { mesh, phase }
+  let witchCaughtUntil = 0;
+  let appleTargets = [];
+  let applesCollected = 0;
+
+  function createWitch(){
+    const group = new THREE.Group();
+    const robeMat = new THREE.MeshLambertMaterial({ color:0x2e1f3d });
+    const trimMat = new THREE.MeshLambertMaterial({ color:0x6b3fa0 });
+    const skin = new THREE.MeshLambertMaterial({ color:0x8fae6b });
+    const hatMat = new THREE.MeshLambertMaterial({ color:0x1c1424 });
+
+    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.4,1.2,10), robeMat);
+    robe.position.y = 0.6; group.add(robe);
+
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.22,0.04,6,12), trimMat);
+    collar.position.y = 1.16; collar.rotation.x = Math.PI/2; group.add(collar);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.16,10,8), skin);
+    head.position.y = 1.36; group.add(head);
+
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.045,0.17,6), skin);
+    nose.position.set(0,1.34,0.16); nose.rotation.x = Math.PI*0.46; group.add(nose);
+
+    const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.34,0.03,12), hatMat);
+    hatBrim.position.y = 1.48; group.add(hatBrim);
+    const hatCone = new THREE.Mesh(new THREE.ConeGeometry(0.19,0.55,10), hatMat);
+    hatCone.position.y = 1.78; group.add(hatCone);
+
+    for(const side of [-1,1]){
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.045,0.5,6), robeMat);
+      arm.position.set(side*0.3,0.98,0.05);
+      arm.rotation.z = side*0.4;
+      group.add(arm);
+    }
+    return group;
+  }
+
+  function createApple(){
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.14,10,8), new THREE.MeshLambertMaterial({color:0xd23c3c}));
+    body.scale.set(1,1.1,1);
+    g.add(body);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,0.09,4), new THREE.MeshLambertMaterial({color:0x5a3a20}));
+    stem.position.y = 0.16; g.add(stem);
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.05,6,6), new THREE.MeshLambertMaterial({color:0x4a9a3f}));
+    leaf.scale.set(1.7,0.3,0.9);
+    leaf.position.set(0.05,0.17,0); g.add(leaf);
+    return g;
+  }
+
+  function createBushCluster(){
+    const g = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({ color:0x3f8f42 });
+    const n = 3 + Math.floor(Math.random()*3);
+    for(let i=0;i<n;i++){
+      const s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32+Math.random()*0.24,0), mat);
+      s.position.set((Math.random()-0.5)*0.55, 0.22+Math.random()*0.2, (Math.random()-0.5)*0.55);
+      g.add(s);
+    }
+    return g;
+  }
+
+  function updateWitchHud(){
+    document.getElementById('appleCount').textContent = applesCollected + '/' + APPLES_NEEDED;
+    document.getElementById('witchCount').textContent = witches.length;
+  }
+
+  function spawnOneWitch(){
+    const spot = randomFieldSpot();
+    const mesh = createWitch();
+    mesh.position.set(spot.x, 0, spot.z);
+    scene.add(mesh);
+    witches.push({ mesh, phase: Math.random()*Math.PI*2 });
+  }
+
+  function spawnWitch(){
+    witchEverTriggered = true;
+    witchActive = true;
+    witchCaughtUntil = 0;
+    witches = [];
+    spawnOneWitch(); // the original
+
+    // the field gets a bit wilder for the hunt — extra bushes to search around
+    for(let i=0;i<45;i++){
+      const b = randomFieldSpot();
+      const bush = createBushCluster();
+      bush.position.set(b.x, 0, b.z);
+      scene.add(bush);
+    }
+
+    applesCollected = 0;
+    appleTargets = [];
+    for(let i=0;i<APPLES_NEEDED;i++){
+      const a = randomFieldSpot();
+      const appleMesh = createApple();
+      appleMesh.position.set(a.x, 0.5, a.z);
+      scene.add(appleMesh);
+      appleTargets.push({ mesh:appleMesh, x:a.x, z:a.z, taken:false, phase:Math.random()*Math.PI*2 });
+    }
+
+    document.getElementById('witchHud').classList.add('show');
+    updateWitchHud();
+  }
+
+  // each apple collected (except the last) summons one more witch, up to
+  // MAX_WITCHES — picking up the pace on purpose, so it stays tense
+  function getWitchTarget(index){
+    const remoteList = Object.values(remotePlayers);
+    if(witches.length <= 2 || remoteList.length === 0 || index % 2 === 0){
+      return { x: yawObject.position.x, z: yawObject.position.z, isLocal:true };
+    }
+    const rp = remoteList[0];
+    return { x: rp.mesh.position.x, z: rp.mesh.position.z, isLocal:false };
+  }
+
+  function catchPlayer(t){
+    witchCaughtUntil = t + 2.5;
+    const overlay = document.getElementById('caughtOverlay');
+    overlay.classList.add('show');
+    setTimeout(()=> overlay.classList.remove('show'), 1600);
+
+    const spot = randomFieldSpot();
+    yawObject.position.x = spot.x;
+    yawObject.position.z = spot.z;
+    feetY = 0; velY = 0; grounded = true;
+
+    // scatter every witch to a fresh spot so you're not caught again instantly
+    witches.forEach(w=>{
+      const wSpot = randomFieldSpot();
+      w.mesh.position.set(wSpot.x, 0, wSpot.z);
+    });
+  }
+
+  function banishWitch(){
+    witchActive = false;
+    witches.forEach(w=> scene.remove(w.mesh));
+    witches = [];
+    document.getElementById('witchHud').classList.remove('show');
+    const note = document.getElementById('witchWinNote');
+    note.classList.add('show');
+    setTimeout(()=> note.classList.remove('show'), 3400);
+  }
+
+  function updateWitch(dt,t){
+    if(!witchEverTriggered && t > WITCH_SPAWN_DELAY){
+      spawnWitch();
+    }
+    if(!witchActive || witches.length===0) return;
+
+    if(t > witchCaughtUntil){
+      for(let i=0;i<witches.length;i++){
+        const w = witches[i];
+        const target = getWitchTarget(i);
+        const dx = target.x - w.mesh.position.x;
+        const dz = target.z - w.mesh.position.z;
+        const dist = Math.hypot(dx,dz);
+        if(dist > 0.1){
+          const spd = MOVE_SPEED * 0.82;
+          w.mesh.position.x += (dx/dist)*spd*dt;
+          w.mesh.position.z += (dz/dist)*spd*dt;
+          w.mesh.rotation.y = Math.atan2(dx,dz);
+        }
+        w.mesh.position.y = 0.05 + Math.sin(t*3+w.phase)*0.05;
+        // ground-bound threat — can't catch you while you're up on the parkour course,
+        // and only a witch actually targeting YOU can catch you
+        if(target.isLocal && dist < 1.15 && feetY < 2.5){
+          catchPlayer(t);
+          break;
+        }
+      }
+    }
+
+    for(const ap of appleTargets){
+      if(ap.taken) continue;
+      ap.mesh.position.y = 0.5 + Math.sin(t*1.6+ap.phase)*0.08;
+      ap.mesh.rotation.y = t*0.8 + ap.phase;
+      const dx = ap.x - yawObject.position.x, dz = ap.z - yawObject.position.z;
+      if(Math.hypot(dx,dz) < 1.2 && feetY < 2.5){
+        ap.taken = true;
+        scene.remove(ap.mesh);
+        applesCollected++;
+        if(applesCollected >= APPLES_NEEDED){
+          banishWitch();
+        } else if(witches.length < MAX_WITCHES){
+          spawnOneWitch();
+        }
+        updateWitchHud();
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // INVENTORY UI
+  // ---------------------------------------------------------------
+  function updateInventoryUI(){
+    document.getElementById('cntPizza').textContent = inventory.pizza;
+    document.getElementById('cntBalloon').textContent = inventory.balloon;
+    document.getElementById('cntPeluche').textContent = inventory.peluche;
+  }
+  function setupInventoryUI(){
+    updateInventoryUI();
+    document.getElementById('slotPizza').classList.add('usable');
+    document.getElementById('slotPeluche').classList.add('usable');
+    ['pizza','balloon','peluche'].forEach(type=>{
+      const el = document.getElementById('slot' + type.charAt(0).toUpperCase() + type.slice(1));
+      el.addEventListener('click', ()=> placeItem(type));
+    });
+    document.getElementById('slotCheckpoint').addEventListener('click', teleportToCheckpoint);
+    updateCheckpointSlotState();
+  }
+
+  function placeItem(type){
+    if(inventory[type] <= 0) return;
+    inventory[type]--;
+    updateInventoryUI();
+    const dropDist = 1.8;
+    const dx = -Math.sin(yaw) * dropDist, dz = -Math.cos(yaw) * dropDist;
+    const x = yawObject.position.x + dx, z = yawObject.position.z + dz;
+    if(multiplayerEnabled){
+      db.ref('rooms/' + roomCode + '/placed').push({ type, x, z, by:myPlayerId });
+    } else {
+      spawnPlacedItem({ type, x, z, by:myPlayerId }, 'local_' + Date.now() + '_' + Math.random());
+    }
+  }
+
+  function spawnPlacedItem(data, key){
+    if(placedItems.find(p=>p.id===key)) return;
+    let mesh;
+    if(data.type==='pizza') mesh = createPizzaMesh();
+    else if(data.type==='balloon') mesh = createBalloonPickup();
+    else mesh = createPelucheMesh();
+    mesh.position.set(data.x, 0, data.z);
+    scene.add(mesh);
+    placedItems.push({ id:key, type:data.type, x:data.x, z:data.z, mesh, phase:Math.random()*Math.PI*2, lastBounce:0 });
+  }
+
+  function updatePlacedItems(t){
+    placedItems.forEach(it=>{
+      it.mesh.position.y = 0.15 + Math.sin(t*1.4+it.phase)*0.07 + (it.type==='balloon'?0.5:0);
+      it.mesh.rotation.y = t*0.5 + it.phase;
+      if(it.type==='balloon' && grounded){
+        const dx=it.x-yawObject.position.x, dz=it.z-yawObject.position.z;
+        if(Math.hypot(dx,dz) < 1.0 && t - it.lastBounce > 0.9){
+          it.lastBounce = t;
+          velY = JUMP_FORCE_BOOSTED;
+          grounded = false;
+        }
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // MULTIPLAYER
+  // ---------------------------------------------------------------
+  function connectMultiplayer(){
+    roomRef = db.ref('rooms/' + roomCode);
+    myRef = roomRef.child('players').child(myPlayerId);
+    myRef.set({
+      name: myCharacter==='leyma' ? 'Leyma' : 'Sam',
+      character: myCharacter,
+      x: yawObject.position.x, y: yawObject.position.y, z: yawObject.position.z,
+      rotY: yaw,
+      ts: firebase.database.ServerValue.TIMESTAMP
+    });
+    myRef.onDisconnect().remove();
+
+    roomRef.child('players').on('value', snap=>{
+      const data = snap.val() || {};
+      const seen = new Set();
+      Object.keys(data).forEach(id=>{
+        if(id === myPlayerId) return;
+        seen.add(id);
+        const p = data[id];
+        if(!remotePlayers[id]){
+          const mesh = createCharacter(p.character || 'sam');
+          const tag = createNameSprite(p.name || '???');
+          tag.position.y = 1.55;
+          mesh.add(tag);
+          scene.add(mesh);
+          remotePlayers[id] = { mesh, targetPos:new THREE.Vector3(p.x,p.y-EYE_HEIGHT,p.z), targetRot:(p.rotY||0)+Math.PI, chatBubble:null, chatBubbleTimer:null };
+        } else {
+          remotePlayers[id].targetPos.set(p.x,p.y-EYE_HEIGHT,p.z);
+          remotePlayers[id].targetRot = (p.rotY||0)+Math.PI;
+        }
+      });
+      Object.keys(remotePlayers).forEach(id=>{
+        if(!seen.has(id)){
+          scene.remove(remotePlayers[id].mesh);
+          delete remotePlayers[id];
+        }
+      });
+      document.getElementById('playerCount').textContent = seen.size + 1;
+    });
+
+    roomRef.child('placed').on('child_added', snap=>{
+      spawnPlacedItem(snap.val(), snap.key);
+    });
+
+    roomRef.child('chat').limitToLast(40).on('child_added', snap=>{
+      handleIncomingMessage(snap.val());
+    });
+
+    roomRef.child('ceremony').on('value', snap=>{
+      const data = snap.val();
+      if(data && data.startedAt && data.startedAt > lastCeremonyTs){
+        lastCeremonyTs = data.startedAt;
+        playCeremony();
+      }
+    });
+  }
+
+  let lastNetworkSend = 0;
+  function sendNetworkUpdate(t){
+    if(!multiplayerEnabled || !myRef) return;
+    if(t - lastNetworkSend < 0.15) return;
+    lastNetworkSend = t;
+    myRef.update({ x:yawObject.position.x, y:yawObject.position.y, z:yawObject.position.z, rotY:yaw });
+  }
+  function updateRemotePlayers(dt){
+    Object.values(remotePlayers).forEach(rp=>{
+      rp.mesh.position.lerp(rp.targetPos, Math.min(dt*8,1));
+      let d = rp.targetRot - rp.mesh.rotation.y;
+      while(d>Math.PI) d-=Math.PI*2; while(d<-Math.PI) d+=Math.PI*2;
+      rp.mesh.rotation.y += d * Math.min(dt*8,1);
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // INPUT
+  // ---------------------------------------------------------------
+  function setupInput(canvas){
+    const joyBase=document.getElementById('joyBase');
+    const joyKnob=document.getElementById('joyKnob');
+    const JOY_RADIUS=46;
+
+    canvas.addEventListener('touchstart', e=>{
+      for(const t of e.changedTouches){
+        if(t.clientX < window.innerWidth*0.5 && joyTouchId===null){
+          joyTouchId=t.identifier; joyOriginX=t.clientX; joyOriginY=t.clientY;
+          joyBase.style.left=(joyOriginX-50)+'px'; joyBase.style.top=(joyOriginY-50)+'px'; joyBase.style.display='block';
+          joyKnob.style.left=(joyOriginX-22)+'px'; joyKnob.style.top=(joyOriginY-22)+'px'; joyKnob.style.display='block';
+        } else if(lookTouchId===null && !e.target.closest('#jumpBtn') && !e.target.closest('#inventory')){
+          lookTouchId=t.identifier; lastLookX=t.clientX; lastLookY=t.clientY;
+        }
+      }
+    }, {passive:true});
+
+    canvas.addEventListener('touchmove', e=>{
+      for(const t of e.changedTouches){
+        if(t.identifier===joyTouchId){
+          let dx=t.clientX-joyOriginX, dy=t.clientY-joyOriginY;
+          const dist=Math.min(Math.hypot(dx,dy),JOY_RADIUS);
+          const ang=Math.atan2(dy,dx);
+          dx=Math.cos(ang)*dist; dy=Math.sin(ang)*dist;
+          joyKnob.style.left=(joyOriginX+dx-22)+'px'; joyKnob.style.top=(joyOriginY+dy-22)+'px';
+          joyVec.x=dx/JOY_RADIUS; joyVec.y=dy/JOY_RADIUS;
+        } else if(t.identifier===lookTouchId){
+          const dx=t.clientX-lastLookX, dy=t.clientY-lastLookY;
+          yaw -= dx*0.0045; pitch -= dy*0.0035; pitch=Math.max(-0.9,Math.min(0.9,pitch));
+          lastLookX=t.clientX; lastLookY=t.clientY;
+        }
+      }
+    }, {passive:true});
+
+    function endTouch(e){
+      for(const t of e.changedTouches){
+        if(t.identifier===joyTouchId){ joyTouchId=null; joyVec.x=0; joyVec.y=0; joyBase.style.display='none'; joyKnob.style.display='none'; }
+        if(t.identifier===lookTouchId) lookTouchId=null;
+      }
+    }
+    canvas.addEventListener('touchend', endTouch, {passive:true});
+    canvas.addEventListener('touchcancel', endTouch, {passive:true});
+
+    canvas.addEventListener('mousedown', e=>{ mouseLookActive=true; lastMouseX=e.clientX; lastMouseY=e.clientY; });
+    window.addEventListener('mousemove', e=>{
+      if(!mouseLookActive) return;
+      const dx=e.clientX-lastMouseX, dy=e.clientY-lastMouseY;
+      yaw -= dx*0.0035; pitch -= dy*0.003; pitch=Math.max(-0.9,Math.min(0.9,pitch));
+      lastMouseX=e.clientX; lastMouseY=e.clientY;
+    });
+    window.addEventListener('mouseup', ()=>{ mouseLookActive=false; });
+
+    window.addEventListener('keydown', e=>{
+      if(['ArrowUp','w','W'].includes(e.key)) keyState.forward=true;
+      if(['ArrowDown','s','S'].includes(e.key)) keyState.back=true;
+      if(['ArrowLeft','a','A'].includes(e.key)) keyState.left=true;
+      if(['ArrowRight','d','D'].includes(e.key)) keyState.right=true;
+      if(e.key===' '){ keyState.jump=true; e.preventDefault(); }
+    });
+    window.addEventListener('keyup', e=>{
+      if(['ArrowUp','w','W'].includes(e.key)) keyState.forward=false;
+      if(['ArrowDown','s','S'].includes(e.key)) keyState.back=false;
+      if(['ArrowLeft','a','A'].includes(e.key)) keyState.left=false;
+      if(['ArrowRight','d','D'].includes(e.key)) keyState.right=false;
+      if(e.key===' ') keyState.jump=false;
+    });
+  }
+
+  function setupJumpButton(){
+    const btn=document.getElementById('jumpBtn');
+    const trigger=()=>{ keyState.jump=true; btn.classList.add('active'); };
+    const release=()=>{ keyState.jump=false; btn.classList.remove('active'); };
+    btn.addEventListener('touchstart', e=>{ e.preventDefault(); trigger(); }, {passive:false});
+    btn.addEventListener('touchend', e=>{ e.preventDefault(); release(); }, {passive:false});
+    btn.addEventListener('mousedown', trigger);
+    btn.addEventListener('mouseup', release);
+    btn.addEventListener('mouseleave', release);
+  }
+
+  function onResize(){
+    camera.aspect=window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  // ---------------------------------------------------------------
+  // MAIN LOOP
+  // ---------------------------------------------------------------
+  function animate(){
+    if(!running) return;
+    requestAnimationFrame(animate);
+    const dt=Math.min(clock.getDelta(),0.05);
+    const t=clock.elapsedTime;
+
+    yawObject.rotation.y=yaw;
+    camera.rotation.x=pitch;
+
+    let mx=0, mz=0;
+    if(keyState.forward) mz-=1;
+    if(keyState.back) mz+=1;
+    if(keyState.left) mx-=1;
+    if(keyState.right) mx+=1;
+    mx+=joyVec.x; mz+=joyVec.y;
+
+    const len=Math.hypot(mx,mz);
+    const targetFactor = len>0.05 ? Math.min(len,1) : 0;
+    speedFactor += (targetFactor - speedFactor) * Math.min(dt*4.5,1);
+    if(len>0.05){ mx/=len; mz/=len; }
+
+    if(speedFactor>0.01){
+      const speed=MOVE_SPEED*speedFactor;
+      const s=Math.sin(yaw), c=Math.cos(yaw);
+      const worldX=mx*c+mz*s, worldZ=-mx*s+mz*c;
+      yawObject.position.x += worldX*speed*dt;
+      yawObject.position.z += worldZ*speed*dt;
+      const r=Math.hypot(yawObject.position.x, yawObject.position.z);
+      if(r>FIELD_RADIUS-2){
+        const ang=Math.atan2(yawObject.position.z, yawObject.position.x);
+        yawObject.position.x=Math.cos(ang)*(FIELD_RADIUS-2);
+        yawObject.position.z=Math.sin(ang)*(FIELD_RADIUS-2);
+      }
+    }
+
+    // subtle lean into strafing + light speed-FOV pulse for a sense of momentum
+    const targetRoll = -mx * 0.028 * speedFactor;
+    rollCurrent += (targetRoll - rollCurrent) * Math.min(dt*3.5,1);
+    camera.rotation.z = rollCurrent;
+    const targetFov = 68 + speedFactor*1.4;
+    if(Math.abs(camera.fov - targetFov) > 0.02){
+      camera.fov += (targetFov - camera.fov) * Math.min(dt*3,1);
+      camera.updateProjectionMatrix();
+    }
+
+    // vertical physics — generalized so the player can stand on the ground
+    // OR on any tower platform, at whatever height it happens to be
+    updateTowerDynamics(dt,t);
+    if(keyState.jump && grounded){
+      velY = JUMP_FORCE;
+      grounded = false;
+    }
+    const prevFeetY = feetY;
+    velY += GRAVITY*dt;
+    feetY += velY*dt;
+    if(velY <= 0){
+      const ground = getGroundHeightAt(yawObject.position.x, yawObject.position.z, prevFeetY);
+      if(feetY <= ground){
+        feetY = ground;
+        velY = 0;
+        grounded = true;
+      } else {
+        grounded = false;
+      }
+    } else {
+      grounded = false;
+    }
+    yawObject.position.y = feetY + EYE_HEIGHT;
+    if(grounded){
+      const bobAmp = 0.016*speedFactor;
+      const bobFreq = 6 + speedFactor*2.2;
+      yawObject.position.y += Math.sin(t*bobFreq)*bobAmp;
+    }
+
+    breezeGroup.rotation.z = Math.sin(t*0.6)*0.01;
+    breezeGroup.rotation.x = Math.sin(t*0.45)*0.006;
+
+    updateAmbientBalloons(t);
+    updatePetals(dt,t);
+    updateFireflies(t);
+    updateWorldItems(t);
+    updatePlacedItems(t);
+    updateWitch(dt,t);
+    updateRemotePlayers(dt);
+    updateFireworks(dt,t);
+    sendNetworkUpdate(t);
+
+    const distToPriest = Math.hypot(yawObject.position.x-PRIEST_POS.x, yawObject.position.z-PRIEST_POS.z);
+    const nowNear = distToPriest < 3.2;
+    if(nowNear !== nearPriest){
+      nearPriest = nowNear;
+      document.getElementById('interactBtn').classList.toggle('show', nearPriest);
+    }
+
+    if(towerTopPlatform){
+      const dx = yawObject.position.x - towerTopPlatform.x, dz = yawObject.position.z - towerTopPlatform.z;
+      const onTopNow = grounded && Math.abs(feetY - towerTopPlatform.y) < 0.06 &&
+        Math.abs(dx) < towerTopPlatform.w && Math.abs(dz) < towerTopPlatform.d;
+      if(onTopNow && !wasOnTowerTop){ triggerFireworks(); }
+      wasOnTowerTop = onTopNow;
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  // ---------------------------------------------------------------
+  // AMBIENT MUSIC (MIDI playlist, loops 1.mid..11.mid forever)
+  // Files must sit next to this HTML file and be served over http(s) —
+  // opening the page as a local file:// will block the fetch on most
+  // mobile browsers, including Android Chrome.
+  // ---------------------------------------------------------------
+  const MIDI_TRACKS = Array.from({length:11}, (_,i)=> (i+1) + '.mid');
+  let midiPlayerEl = null;
+  let midiIndex = -1;
+  let musicEnabled = true;
+
+  function loadMidiTrack(i){
+    if(!midiPlayerEl) return;
+    midiIndex = ((i % MIDI_TRACKS.length) + MIDI_TRACKS.length) % MIDI_TRACKS.length;
+    const onLoad = ()=>{
+      midiPlayerEl.removeEventListener('load', onLoad);
+      if(musicEnabled) midiPlayerEl.start();
+    };
+    midiPlayerEl.addEventListener('load', onLoad);
+    midiPlayerEl.src = MIDI_TRACKS[midiIndex];
+  }
+
+  function setupMusic(){
+    midiPlayerEl = document.getElementById('bgMidiPlayer');
+    const toggleBtn = document.getElementById('musicToggle');
+    if(!midiPlayerEl || !window.customElements || !customElements.get('midi-player')){
+      // library failed to load (offline / blocked CDN) — game keeps working, just silent
+      if(toggleBtn) toggleBtn.style.display = 'none';
+      return;
+    }
+    midiPlayerEl.addEventListener('stop', e=>{
+      if(e.detail && e.detail.finished){
+        loadMidiTrack(midiIndex + 1); // advance the playlist, looping 1→11→1...
+      }
+    });
+    toggleBtn.addEventListener('click', ()=>{
+      musicEnabled = !musicEnabled;
+      toggleBtn.textContent = musicEnabled ? '🔊' : '🔇';
+      if(musicEnabled) midiPlayerEl.start(); else midiPlayerEl.stop();
+    });
+    loadMidiTrack(0);
+  }
+
+})();
+</script>
+</body>
+</html>
